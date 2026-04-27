@@ -117,7 +117,16 @@ export function createRailsAuthClient(options: RailsAuthOptions): RailsAuthClien
   }
 
   async function login(): Promise<void> {
-    const pageRes = await http.fetch(loginPath, { method: "GET", redirect: "manual" });
+    // Login pages are HTML — override any consumer-set Accept (which is
+    // typically "application/json" for the post-auth XHR calls). Sending
+    // a JSON Accept against /sign_in makes some Rails apps return 500.
+    const HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
+    const pageRes = await http.fetch(loginPath, {
+      method: "GET",
+      redirect: "manual",
+      headers: { Accept: HTML_ACCEPT },
+    });
     if (!pageRes.ok && pageRes.status !== 302) {
       throw new Error(`GET ${loginPath} failed: ${pageRes.status}`);
     }
@@ -135,6 +144,7 @@ export function createRailsAuthClient(options: RailsAuthOptions): RailsAuthClien
 
     const postHeaders: Record<string, string> = {
       "Content-Type": "application/x-www-form-urlencoded",
+      Accept: HTML_ACCEPT,
     };
     if (sendReferer) postHeaders["Referer"] = `${baseUrl}${loginPath}`;
 
@@ -153,7 +163,11 @@ export function createRailsAuthClient(options: RailsAuthOptions): RailsAuthClien
       throw new InvalidCredentials(`Unexpected login response: HTTP ${loginRes.status}`);
     }
 
-    const after = await http.fetch(postLoginPath, { method: "GET", redirect: "manual" });
+    const after = await http.fetch(postLoginPath, {
+      method: "GET",
+      redirect: "manual",
+      headers: { Accept: HTML_ACCEPT },
+    });
     if (
       after.status === 302 &&
       (after.headers.get("Location") ?? "").includes(loginPath)
