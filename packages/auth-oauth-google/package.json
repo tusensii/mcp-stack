@@ -11,6 +11,6 @@
   },
   "dependencies": {
     "@mcp-stack/mcp-core": "workspace:*",
-    "google-auth-library": "^9.0.0"
+    "google-auth-library": "^10.0.0"
   }
 }
