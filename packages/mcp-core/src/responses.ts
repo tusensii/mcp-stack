@@ -8,6 +8,12 @@ import { AuthExpired, RateLimited } from "./errors.js";
 export interface McpToolResponse {
   content: Array<{ type: "text"; text: string }>;
   isError?: true;
+  /**
+   * The MCP SDK's `CallToolResult` is an open shape (allows `_meta` and
+   * future extensions). The index signature lets our response objects
+   * be assigned directly to SDK tool callbacks without a cast.
+   */
+  [key: string]: unknown;
 }
 
 /**
