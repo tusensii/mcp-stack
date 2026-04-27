@@ -26,12 +26,18 @@ import { parseArgs } from "node:util";
 
 const SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
+// pnpm's `--` separator can leak into argv; strip a leading `--` so it
+// doesn't get treated as the parseArgs end-of-options marker.
+const rawArgs = process.argv.slice(2);
+const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 const { values } = parseArgs({
+  args,
   options: {
     "client-id": { type: "string" },
     "client-secret": { type: "string" },
     port: { type: "string", default: "9876" },
   },
+  allowPositionals: true,
 });
 
 const clientId = values["client-id"];
