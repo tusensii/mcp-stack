@@ -5,7 +5,12 @@ import {
   fetchAppointments,
   cancelAppointmentRequest,
 } from "../sh/endpoints.js";
-import { textContent, errorContent } from "./utils.js";
+import {
+  textContent,
+  errorContent,
+  lateCancelInfo,
+  lateCancelMessage,
+} from "./utils.js";
 import type { AuthEnv } from "../sh/auth.js";
 
 export function registerCancelAppointmentTool(
@@ -49,20 +54,18 @@ export function registerCancelAppointmentTool(
         const startsAtRaw = confirmedEvent?.starts_at ?? pendingAr?.starts_at;
 
         if (startsAtRaw) {
-          const startsAtMs = new Date(startsAtRaw).getTime();
-          const deadlineMs =
-            startsAtMs - session.cancellationWindowHours * 60 * 60 * 1000;
+          const { deadlineMs, isLateCancel } = lateCancelInfo(
+            startsAtRaw,
+            session.cancellationWindowHours
+          );
 
-          if (Date.now() > deadlineMs && !acknowledge_late_cancel) {
-            const deadline = new Date(deadlineMs).toLocaleString("en-US", {
-              timeZone: "America/Los_Angeles",
-              dateStyle: "medium",
-              timeStyle: "short",
-            });
+          if (isLateCancel && !acknowledge_late_cancel) {
             return errorContent(
-              `This cancellation is inside the ${session.cancellationWindowHours}-hour window ` +
-                `(appointment starts ${startsAtRaw}, free-cancel deadline was ${deadline} PT). ` +
-                `Policy may charge a late-cancel fee. Re-call with acknowledge_late_cancel: true to proceed.`
+              lateCancelMessage(
+                startsAtRaw,
+                session.cancellationWindowHours,
+                deadlineMs
+              )
             );
           }
         } else if (!acknowledge_late_cancel) {
@@ -76,9 +79,8 @@ export function registerCancelAppointmentTool(
         await cancelAppointmentRequest(env, appointment_request_id);
 
         const wasLateCancel = startsAtRaw
-          ? Date.now() >
-            new Date(startsAtRaw).getTime() -
-              session.cancellationWindowHours * 60 * 60 * 1000
+          ? lateCancelInfo(startsAtRaw, session.cancellationWindowHours)
+              .isLateCancel
           : false;
 
         return textContent({

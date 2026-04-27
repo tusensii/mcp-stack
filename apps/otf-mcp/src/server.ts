@@ -5,6 +5,13 @@ export interface Env {
   OTF_REFRESH_TOKEN: string;
   OTF_DEVICE_KEY: string;
   MCP_PATH_SECRET: string;
+  // Optional: Google Calendar integration. When all four are set, OTF
+  // booking creates WO/PWO blocks and cancellation removes them.
+  // Tools degrade gracefully (skip + note) if any are missing.
+  GOOGLE_OAUTH_CLIENT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  GOOGLE_OAUTH_REFRESH_TOKEN?: string;
+  GOOGLE_CALENDAR_ID?: string;
 }
 
 export function buildServer(env: Env): McpServer {

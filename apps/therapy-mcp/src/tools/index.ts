@@ -5,6 +5,7 @@ import { registerListAvailabilityTool } from "./list_availability.js";
 import { registerListAppointmentsTool } from "./list_appointments.js";
 import { registerBookAppointmentTool } from "./book_appointment.js";
 import { registerCancelAppointmentTool } from "./cancel_appointment.js";
+import { registerRescheduleTool } from "./reschedule.js";
 
 export function registerAllTools(server: McpServer, env: AuthEnv): void {
   registerMemberInfoTool(server, env);
@@ -12,4 +13,5 @@ export function registerAllTools(server: McpServer, env: AuthEnv): void {
   registerListAppointmentsTool(server, env);
   registerBookAppointmentTool(server, env);
   registerCancelAppointmentTool(server, env);
+  registerRescheduleTool(server, env);
 }

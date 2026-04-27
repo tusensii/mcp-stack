@@ -1,6 +1,45 @@
 export { textContent, errorContent } from "@mcp-stack/mcp-core";
 
 /**
+ * Compute whether a given start time is within the late-cancel window.
+ * Returns the deadline (ms) and whether `now` is past it.
+ *
+ * `cancellationWindowHours` comes from `Session.cancellationWindowHours`
+ * (Sessions Health portal configuration).
+ */
+export function lateCancelInfo(
+  startsAtRaw: string,
+  cancellationWindowHours: number,
+  nowMs: number = Date.now()
+): { deadlineMs: number; isLateCancel: boolean } {
+  const startsAtMs = new Date(startsAtRaw).getTime();
+  const deadlineMs = startsAtMs - cancellationWindowHours * 60 * 60 * 1000;
+  return { deadlineMs, isLateCancel: nowMs > deadlineMs };
+}
+
+/**
+ * Build the user-facing late-cancel rejection message used by both
+ * `therapy_cancel_appointment` and `therapy_reschedule`. Wording must
+ * stay identical so the client behavior is consistent across tools.
+ */
+export function lateCancelMessage(
+  startsAtRaw: string,
+  cancellationWindowHours: number,
+  deadlineMs: number
+): string {
+  const deadline = new Date(deadlineMs).toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return (
+    `This cancellation is inside the ${cancellationWindowHours}-hour window ` +
+    `(appointment starts ${startsAtRaw}, free-cancel deadline was ${deadline} PT). ` +
+    `Policy may charge a late-cancel fee. Re-call with acknowledge_late_cancel: true to proceed.`
+  );
+}
+
+/**
  * Given an ISO timestamp string that already contains a UTC offset
  * (e.g. "2026-04-21T18:00:00.000-07:00"), return both forms:
  * - local: the string as-is (already has offset)

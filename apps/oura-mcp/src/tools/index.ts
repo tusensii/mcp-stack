@@ -14,6 +14,14 @@ import { registerWorkoutTools } from "./workout.js";
 import { registerSessionTools } from "./session.js";
 import { registerTagTools } from "./tag.js";
 import { registerSummaryTools } from "./summary.js";
+import { registerBaselineCompareTool } from "./baseline_compare.js";
+import { registerPeriodCompareTool } from "./period_compare.js";
+import { registerCorrelationTool } from "./correlation.js";
+import { registerInterventionAnalysisTool } from "./intervention_analysis.js";
+import { registerAnomalyDetectTool } from "./anomaly_detect.js";
+import { registerRecoveryForecastTool } from "./recovery_forecast.js";
+import { registerAlcoholImpactTool } from "./alcohol_impact.js";
+import { registerWeeklyDigestTool } from "./weekly_digest.js";
 
 export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerPersonalTools(server, client);
@@ -30,4 +38,12 @@ export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerSessionTools(server, client);
   registerTagTools(server, client);
   registerSummaryTools(server, client);
+  registerBaselineCompareTool(server, client);
+  registerPeriodCompareTool(server, client);
+  registerCorrelationTool(server, client);
+  registerInterventionAnalysisTool(server, client);
+  registerAnomalyDetectTool(server, client);
+  registerRecoveryForecastTool(server, client);
+  registerAlcoholImpactTool(server, client);
+  registerWeeklyDigestTool(server, client);
 }

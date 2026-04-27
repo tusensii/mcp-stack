@@ -84,6 +84,9 @@ export function registerListAppointmentsTool(
               session.cancellationWindowHours * 60 * 60 * 1000;
 
             return {
+              // Unified id — composite event id for confirmed entries
+              id: e.id,
+              source: "appointment" as const,
               status: "confirmed" as const,
               event_id: e.id,
               // event_id format "22420788-260414" is a different ID space from appointment_request_id
@@ -107,53 +110,93 @@ export function registerListAppointmentsTool(
             };
           });
 
-        // Pending requests from the same endpoint — not yet accepted by the practitioner
+        // Build dedupe sets so a pending request linked to (or matching the
+        // start time of) a confirmed event is dropped — confirmed always wins.
+        const confirmedRequestIds = new Set<number>(
+          data.events
+            .map((e) => e.appointment_request_id)
+            .filter((x): x is number => typeof x === "number")
+        );
+        const confirmedStartsAt = new Set<string>(
+          data.events.map((e) => e.starts_at)
+        );
+
+        // Map an appointment_request to the unified output shape. Used for both
+        // pending and cancelled rows — they share every field except `status`.
+        const mapRequest = (
+          ar: NonNullable<typeof data.appointment_requests>[number],
+          status: "pending" | "cancelled"
+        ) => {
+          // Sessions Health stores appointment_request times in server timezone (CDT -05:00).
+          // Convert to UTC first, then to Pacific for local display.
+          const startsAtUtc = toUtc(ar.starts_at);
+          const endsAtUtc = toUtc(ar.ends_at);
+          const startsAtLocal = toLocalIso(startsAtUtc);
+          const endsAtLocal = toLocalIso(endsAtUtc);
+          const durationMs =
+            new Date(endsAtUtc).getTime() - new Date(startsAtUtc).getTime();
+
+          const loc = locationMap.get(ar.location_id);
+          const location = loc
+            ? formatLocation(loc)
+            : { id: ar.location_id, name: "Unknown", phone: "" };
+
+          // Anchor deadline to UTC to avoid any local-time offset confusion
+          const deadlineMs =
+            new Date(startsAtUtc).getTime() -
+            session.cancellationWindowHours * 60 * 60 * 1000;
+
+          return {
+            // Prefix request ids so logs can distinguish from event ids
+            id: `req_${ar.id}`,
+            source: "appointment_request" as const,
+            status,
+            event_id: null,
+            appointment_request_id: ar.id,
+            starts_at_local: startsAtLocal,
+            starts_at_utc: startsAtUtc,
+            ends_at_local: endsAtLocal,
+            ends_at_utc: endsAtUtc,
+            duration_minutes: Math.round(durationMs / 60_000),
+            timezone: TIMEZONE,
+            location,
+            practitioner_name: "your therapist",
+            service_name: "Individual Therapy",
+            cancellation_deadline_local: toLocalIso(
+              new Date(deadlineMs).toISOString()
+            ),
+            cancellation_deadline_utc: new Date(deadlineMs).toISOString(),
+            can_cancel_free: now < deadlineMs,
+          };
+        };
+
+        // Pending requests — not yet accepted by the practitioner.
+        // Drop any pending row a confirmed event already covers (linked id or
+        // exact starts_at match) so confirmed always wins.
         const pending = (data.appointment_requests ?? [])
           .filter((ar) => {
             if (ar.status !== "pending") return false;
+            if (confirmedRequestIds.has(ar.id)) return false;
+            if (confirmedStartsAt.has(ar.starts_at)) return false;
             const startMs = new Date(ar.starts_at).getTime();
             return startMs >= cutoffPast && startMs <= cutoffFuture;
           })
-          .map((ar) => {
-            // Sessions Health stores appointment_request times in server timezone (CDT -05:00).
-            // Convert to UTC first, then to Pacific for local display.
-            const startsAtUtc = toUtc(ar.starts_at);
-            const endsAtUtc = toUtc(ar.ends_at);
-            const startsAtLocal = toLocalIso(startsAtUtc);
-            const endsAtLocal = toLocalIso(endsAtUtc);
-            const durationMs = new Date(endsAtUtc).getTime() - new Date(startsAtUtc).getTime();
+          .map((ar) => mapRequest(ar, "pending"));
 
-            const loc = locationMap.get(ar.location_id);
-            const location = loc
-              ? formatLocation(loc)
-              : { id: ar.location_id, name: "Unknown", phone: "" };
+        // Cancelled requests — surfaced primarily for include_past=true.
+        // Future-dated cancelled requests are rare but pass through if they fit
+        // the window. No dedupe needed: a cancelled request can't conflict with
+        // a confirmed event (the API would not surface both).
+        const cancelled = (data.appointment_requests ?? [])
+          .filter((ar) => {
+            if (ar.status !== "cancelled") return false;
+            const startMs = new Date(ar.starts_at).getTime();
+            return startMs >= cutoffPast && startMs <= cutoffFuture;
+          })
+          .map((ar) => mapRequest(ar, "cancelled"));
 
-            // Anchor deadline to UTC to avoid any local-time offset confusion
-            const deadlineMs =
-              new Date(startsAtUtc).getTime() -
-              session.cancellationWindowHours * 60 * 60 * 1000;
-
-            return {
-              status: "pending" as const,
-              event_id: null,
-              appointment_request_id: ar.id,
-              starts_at_local: startsAtLocal,
-              starts_at_utc: startsAtUtc,
-              ends_at_local: endsAtLocal,
-              ends_at_utc: endsAtUtc,
-              duration_minutes: Math.round(durationMs / 60_000),
-              timezone: TIMEZONE,
-              location,
-              practitioner_name: "your therapist",
-              service_name: "Individual Therapy",
-              cancellation_deadline_local: toLocalIso(new Date(deadlineMs).toISOString()),
-              cancellation_deadline_utc: new Date(deadlineMs).toISOString(),
-              can_cancel_free: now < deadlineMs,
-            };
-          });
-
-        // Sort confirmed + pending together by start time
-        const all = [...confirmed, ...pending].sort(
+        // Sort all rows together by start time (ascending)
+        const all = [...confirmed, ...pending, ...cancelled].sort(
           (a, b) =>
             new Date(a.starts_at_utc).getTime() -
             new Date(b.starts_at_utc).getTime()
