@@ -13,7 +13,7 @@ import {
 import { textContent, errorContent, todayInTz } from "./utils.js";
 import { defined, mean, linearSlope } from "../oura/stats.js";
 import type { SleepPeriod } from "../oura/types.js";
-import { detectAnomalies, fetchMetricSeries } from "./anomaly_detect.js";
+import { detectAnomalies, buildMetricSeries } from "./anomaly_detect.js";
 
 /** Add N days to YYYY-MM-DD. */
 function shiftDate(date: string, days: number): string {
@@ -273,21 +273,8 @@ export function registerWeeklyDigestTool(server: McpServer, client: OuraClient):
         };
 
         // ---- Anomalies (z>2.0 vs 30d baseline, top 3 by |z|) ----
-        const series = await fetchMetricSeries(
-          client,
-          [
-            "readiness",
-            "sleep_score",
-            "hrv",
-            "rhr",
-            "deep_sleep",
-            "rem_sleep",
-            "respiratory_rate",
-            "activity_score",
-          ],
-          baselineStart,
-          weekEnd,
-        );
+        // Reuse already-fetched arrays — no extra API calls.
+        const series = buildMetricSeries(readiness, sleepDaily, activity, sleepPeriods);
         const allWeekAnomalies = detectAnomalies(
           series,
           [

@@ -76,8 +76,53 @@ function dateList(start: string, end: string): string[] {
 }
 
 /**
+ * Pure helper: assemble a per-day metric series from already-fetched Oura data.
+ * Used both by `fetchMetricSeries` (which fetches fresh) and by callers like
+ * `weekly_digest` that already have the underlying arrays in hand.
+ */
+export function buildMetricSeries(
+  readiness: ReadonlyArray<{ day: string; score: number | null }>,
+  dailySleep: ReadonlyArray<{ day: string; score: number | null }>,
+  activity: ReadonlyArray<{ day: string; score: number | null }>,
+  sleepPeriods: ReadonlyArray<SleepPeriod>,
+): Record<MetricKey, Record<string, number | null>> {
+  const result: Record<MetricKey, Record<string, number | null>> = {
+    readiness: {},
+    sleep_score: {},
+    hrv: {},
+    rhr: {},
+    deep_sleep: {},
+    rem_sleep: {},
+    respiratory_rate: {},
+    activity_score: {},
+  };
+
+  for (const r of readiness) result.readiness[r.day] = r.score;
+  for (const s of dailySleep) result.sleep_score[s.day] = s.score;
+  for (const a of activity) result.activity_score[a.day] = a.score;
+
+  const byDay = new Map<string, SleepPeriod[]>();
+  for (const p of sleepPeriods) {
+    const arr = byDay.get(p.day) ?? [];
+    arr.push(p);
+    byDay.set(p.day, arr);
+  }
+  for (const [day, periods] of byDay) {
+    const main = pickMainSleep(periods);
+    if (!main) continue;
+    result.hrv[day] = main.average_hrv;
+    result.rhr[day] = main.lowest_heart_rate;
+    result.deep_sleep[day] = main.deep_sleep_duration;
+    result.rem_sleep[day] = main.rem_sleep_duration;
+    result.respiratory_rate[day] = main.average_breath;
+  }
+
+  return result;
+}
+
+/**
  * Build a per-day metric value map for the requested metrics over the full
- * fetch window. Returns `Record<metric, Record<dateYYYYMMDD, value | null>>`.
+ * fetch window. Skips API calls for metric families not requested.
  */
 export async function fetchMetricSeries(
   client: OuraClient,
@@ -105,39 +150,7 @@ export async function fetchMetricSeries(
     needsSleepPeriod ? getSleepPeriods(client, params, 20) : Promise.resolve([]),
   ]);
 
-  const result: Record<MetricKey, Record<string, number | null>> = {
-    readiness: {},
-    sleep_score: {},
-    hrv: {},
-    rhr: {},
-    deep_sleep: {},
-    rem_sleep: {},
-    respiratory_rate: {},
-    activity_score: {},
-  };
-
-  for (const r of readiness) result.readiness[r.day] = r.score;
-  for (const s of dailySleep) result.sleep_score[s.day] = s.score;
-  for (const a of activity) result.activity_score[a.day] = a.score;
-
-  // Group sleep periods by day, pick main sleep per day
-  const byDay = new Map<string, SleepPeriod[]>();
-  for (const p of sleepPeriods) {
-    const arr = byDay.get(p.day) ?? [];
-    arr.push(p);
-    byDay.set(p.day, arr);
-  }
-  for (const [day, periods] of byDay) {
-    const main = pickMainSleep(periods);
-    if (!main) continue;
-    result.hrv[day] = main.average_hrv;
-    result.rhr[day] = main.lowest_heart_rate;
-    result.deep_sleep[day] = main.deep_sleep_duration;
-    result.rem_sleep[day] = main.rem_sleep_duration;
-    result.respiratory_rate[day] = main.average_breath;
-  }
-
-  return result;
+  return buildMetricSeries(readiness, dailySleep, activity, sleepPeriods);
 }
 
 /**
