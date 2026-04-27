@@ -30,15 +30,17 @@ shared Durable Objects. Secrets live per-Worker.
 
 ## Migration status
 
-| App          | Worker name        | Source repo                            | Migrated | Verified |
-| ------------ | ------------------ | -------------------------------------- | -------- | -------- |
-| oura-mcp     | `oura-mcp`         | `../oura_mcp/`                         | no       | no       |
-| therapy-mcp  | `therapy-mcp`      | `../sessions_health_mcp/`              | no       | no       |
-| otf-mcp      | `otf-mcp`          | `../otf_mcp/`                          | no       | no       |
-| gmail-mcp    | `gmail-mcp-worker` | `../gmail_mcp/gmail-mcp-worker/`       | no       | no       |
+| App          | Worker name        | Live URL                                          | Migrated | Verified |
+| ------------ | ------------------ | ------------------------------------------------- | -------- | -------- |
+| oura-mcp     | `oura-mcp`         | https://oura-mcp.YOUR_SUBDOMAIN.workers.dev              | ✓        | ✓        |
+| therapy-mcp  | `therapy-mcp`      | https://therapy-mcp.YOUR_SUBDOMAIN.workers.dev           | ✓        | ✓        |
+| otf-mcp      | `otf-mcp`          | https://otf-mcp.YOUR_SUBDOMAIN.workers.dev               | ✓        | ✓        |
+| gmail-mcp    | `gmail-mcp-worker` | https://gmail-mcp-worker.YOUR_SUBDOMAIN.workers.dev      | ✓        | ✓        |
 
-Migration order is fixed: scaffolding → oura → therapy → otf → gmail. Each
-app must deploy and run cleanly for 24 hours before the next begins.
+Pre-migration source repos are archived on GitHub
+(`tusensii/{oura,otf,therapy}-mcp`, `tusensii/gmail-mcp-worker`) and
+renamed locally to `*.archived` for a 30-day rollback window before
+deletion.
 
 ## Common commands
 
