@@ -9,14 +9,14 @@ and DNS — the monorepo is a build-time consolidation, not a runtime one.
 ```
 mcp-stack/
 ├── packages/                # shared, build-time only
-│   ├── mcp-core             # JSON-RPC dispatch, SSE framing, MCP protocol
-│   ├── http-fetch           # fetch wrapper: cookie jar, retries, timeouts
-│   ├── auth-rails           # Devise-style cookie + CSRF (therapy)
-│   ├── auth-cognito         # AWS Cognito SRP (otf)
-│   ├── auth-oauth-google    # Google OAuth refresh-token flow (gmail)
-│   ├── auth-bearer          # static PAT (oura)
-│   ├── shared-types         # cross-MCP types (Location, TimeWindow, etc.)
-│   └── observability        # structured logging, gated on env flag
+│   ├── mcp-core             # path-secret check + thin wrapper over @modelcontextprotocol/sdk and agents
+│   ├── http-fetch           # fetch wrapper: per-instance cookie jar, retries, timeouts, typed errors
+│   ├── auth-rails           # Devise-style sign-in: form CSRF -> POST -> meta CSRF, auto re-auth on 401
+│   ├── auth-cognito         # AWS Cognito refresh-token flow (SRP bootstrap lives in apps/otf-mcp/scripts/)
+│   ├── auth-oauth-google    # configured OAuth2Client from google-auth-library
+│   ├── auth-bearer          # static PAT header injection
+│   ├── shared-types         # cross-MCP types (Location, TimeWindow, BookingStatus)
+│   └── observability        # structured logger, gated on DEBUG / OBSERVABILITY env flags
 └── apps/                    # one Worker per app, each independent at runtime
     ├── oura-mcp
     ├── otf-mcp

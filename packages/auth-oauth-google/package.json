@@ -8,5 +8,9 @@
   "scripts": {
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mcp-stack/mcp-core": "workspace:*",
+    "google-auth-library": "^9.0.0"
   }
 }

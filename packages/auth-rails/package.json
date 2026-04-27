@@ -8,5 +8,9 @@
   "scripts": {
     "type-check": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mcp-stack/http-fetch": "workspace:*",
+    "@mcp-stack/mcp-core": "workspace:*"
   }
 }
