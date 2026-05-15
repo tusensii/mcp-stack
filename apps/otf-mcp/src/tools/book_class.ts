@@ -49,7 +49,7 @@ export function registerBookClassTool(server: McpServer, env: Env): void {
           if (!config) {
             calendar_blocks = {
               status: "skipped",
-              reason: "Google Calendar secrets not configured (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN, GOOGLE_CALENDAR_ID). Booking succeeded; add blocks manually if desired.",
+              reason: "Google Calendar secrets not configured (GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, GOOGLE_OAUTH_REFRESH_TOKEN, GOOGLE_CALENDAR_ID, OTF_CALENDAR_ATTENDEE). Booking succeeded; add blocks manually if desired.",
             };
           } else {
             try {
@@ -63,6 +63,7 @@ export function registerBookClassTool(server: McpServer, env: Env): void {
                 config.calendarId,
                 rawBooking.class.starts_at,
                 classEndUtc,
+                config.attendee,
               );
               calendar_blocks = { status: "created", ...ids };
             } catch (e) {

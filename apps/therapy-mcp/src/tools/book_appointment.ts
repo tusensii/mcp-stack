@@ -21,9 +21,10 @@ export function registerBookAppointmentTool(
   server: McpServer,
   env: AuthEnv
 ): void {
+  const practitionerName = env.PRACTITIONER_DISPLAY_NAME ?? "your therapist";
   server.tool(
     "therapy_book_appointment",
-    "Submit a therapy appointment request with your therapist. Returns a PENDING request — Chris must accept manually. You'll receive an email when confirmed. Use starts_at_utc from therapy_list_availability.",
+    `Submit a therapy appointment request with ${practitionerName}. Returns a PENDING request — the practitioner must accept manually. You'll receive an email when confirmed. Use starts_at_utc from therapy_list_availability.`,
     {
       starts_at_utc: z
         .string()
@@ -75,14 +76,14 @@ export function registerBookAppointmentTool(
           duration_minutes: DURATION_MINUTES,
           timezone: TIMEZONE,
           location,
-          practitioner_name: "your therapist",
+          practitioner_name: practitionerName,
           service_name: "Individual Therapy",
           cancellation_deadline_local: addMinutesToIso(
             startsAtLocal,
             -session.cancellationWindowHours * 60
           ),
           cancellation_deadline_utc: new Date(deadlineMs).toISOString(),
-          note: "Pending practitioner acceptance. You'll receive a confirmation email from Sessions Health when Chris accepts.",
+          note: `Pending practitioner acceptance. You'll receive a confirmation email from Sessions Health when ${practitionerName} accepts.`,
         });
       } catch (e) {
         return errorContent(e instanceof Error ? e.message : String(e));

@@ -19,9 +19,10 @@ export function registerListAppointmentsTool(
   server: McpServer,
   env: AuthEnv
 ): void {
+  const practitionerName = env.PRACTITIONER_DISPLAY_NAME ?? "your therapist";
   server.tool(
     "therapy_list_appointments",
-    "Returns your therapy appointments: confirmed (accepted by Chris) and pending (submitted but not yet accepted). Defaults to upcoming within 90 days. IMPORTANT: pending appointments require Chris to manually accept — do NOT tell the user they are 'booked' for pending ones.",
+    `Returns your therapy appointments: confirmed (accepted by ${practitionerName}) and pending (submitted but not yet accepted). Defaults to upcoming within 90 days. IMPORTANT: pending appointments require the practitioner to manually accept — do NOT tell the user they are 'booked' for pending ones.`,
     {
       include_past: z
         .boolean()
@@ -99,7 +100,7 @@ export function registerListAppointmentsTool(
               timezone: TIMEZONE,
               location,
               practitioner_name:
-                practitionerMap.get(e.user_id) ?? "your therapist",
+                practitionerMap.get(e.user_id) ?? practitionerName,
               service_name: "Individual Therapy",
               cancellation_deadline_local: addMinutesToIso(
                 startsAtLocal,
@@ -160,7 +161,7 @@ export function registerListAppointmentsTool(
             duration_minutes: Math.round(durationMs / 60_000),
             timezone: TIMEZONE,
             location,
-            practitioner_name: "your therapist",
+            practitioner_name: practitionerName,
             service_name: "Individual Therapy",
             cancellation_deadline_local: toLocalIso(
               new Date(deadlineMs).toISOString()

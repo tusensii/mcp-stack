@@ -22,9 +22,6 @@ import { google, type calendar_v3 } from "googleapis";
 import { buildGoogleOAuthClient } from "@mcp-stack/auth-oauth-google";
 import type { Env } from "../server.js";
 
-/** Email the WO/PWO blocks invite, mirroring the user-memory protocol. */
-export const WORKOUT_BLOCK_ATTENDEE = "user@example.com";
-
 /** Length of the post-workout block. */
 export const PWO_DURATION_MINUTES = 30;
 
@@ -36,6 +33,7 @@ export interface CalendarConfig {
   clientSecret: string;
   refreshToken: string;
   calendarId: string;
+  attendee: string;
 }
 
 /**
@@ -48,12 +46,14 @@ export function getCalendarConfig(env: Env): CalendarConfig | null {
     GOOGLE_OAUTH_CLIENT_SECRET,
     GOOGLE_OAUTH_REFRESH_TOKEN,
     GOOGLE_CALENDAR_ID,
+    OTF_CALENDAR_ATTENDEE,
   } = env;
   if (
     !GOOGLE_OAUTH_CLIENT_ID ||
     !GOOGLE_OAUTH_CLIENT_SECRET ||
     !GOOGLE_OAUTH_REFRESH_TOKEN ||
-    !GOOGLE_CALENDAR_ID
+    !GOOGLE_CALENDAR_ID ||
+    !OTF_CALENDAR_ATTENDEE
   ) {
     return null;
   }
@@ -62,6 +62,7 @@ export function getCalendarConfig(env: Env): CalendarConfig | null {
     clientSecret: GOOGLE_OAUTH_CLIENT_SECRET,
     refreshToken: GOOGLE_OAUTH_REFRESH_TOKEN,
     calendarId: GOOGLE_CALENDAR_ID,
+    attendee: OTF_CALENDAR_ATTENDEE,
   };
 }
 
@@ -80,8 +81,8 @@ export interface WorkoutBlocksCreated {
 
 /**
  * Create both blocks. WO = class start → class end. PWO = class end →
- * class end + 30 min. Both are private, no Meet URL, attendee is
- * `user@example.com`. `sendUpdates: "none"` keeps these
+ * class end + 30 min. Both are private, no Meet URL, attendee comes from
+ * the OTF_CALENDAR_ATTENDEE secret. `sendUpdates: "none"` keeps these
  * silent — they're passive busy markers, not meeting invites.
  */
 export async function createWorkoutBlocks(
@@ -89,6 +90,7 @@ export async function createWorkoutBlocks(
   calendarId: string,
   classStartUtc: string,
   classEndUtc: string,
+  attendee: string,
 ): Promise<WorkoutBlocksCreated> {
   const wo = await calendar.events.insert({
     calendarId,
@@ -97,7 +99,7 @@ export async function createWorkoutBlocks(
       summary: "WO",
       start: { dateTime: classStartUtc },
       end: { dateTime: classEndUtc },
-      attendees: [{ email: WORKOUT_BLOCK_ATTENDEE }],
+      attendees: [{ email: attendee }],
       visibility: "private",
       reminders: { useDefault: false },
     },
@@ -113,7 +115,7 @@ export async function createWorkoutBlocks(
       summary: "PWO",
       start: { dateTime: classEndUtc },
       end: { dateTime: pwoEnd },
-      attendees: [{ email: WORKOUT_BLOCK_ATTENDEE }],
+      attendees: [{ email: attendee }],
       visibility: "private",
       reminders: { useDefault: false },
     },

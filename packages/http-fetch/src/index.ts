@@ -71,6 +71,11 @@ export class CookieJar {
   get size(): number {
     return this.cookies.size;
   }
+
+  /** Read a cookie value by name, or undefined if not present. */
+  get(name: string): string | undefined {
+    return this.cookies.get(name);
+  }
 }
 
 function getSetCookieHeaders(headers: Headers): string[] {

@@ -14,7 +14,7 @@ export function registerListAvailabilityTool(
 ): void {
   server.tool(
     "therapy_list_availability",
-    "Returns open appointment slots for your therapist within a date range. Defaults to the next 30 days. Use starts_at_utc from a slot as input to therapy_book_appointment.",
+    `Returns open appointment slots for ${env.PRACTITIONER_DISPLAY_NAME ?? "your therapist"} within a date range. Defaults to the next 30 days. Use starts_at_utc from a slot as input to therapy_book_appointment.`,
     {
       start_date: z
         .string()

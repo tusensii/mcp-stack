@@ -32,7 +32,7 @@ export function registerMemberInfoTool(server: McpServer, env: AuthEnv): void {
             timezone: me.organization.time_zone,
           },
           practitioner: {
-            name: "your therapist",
+            name: env.PRACTITIONER_DISPLAY_NAME ?? "your therapist",
             availability_id: session.availabilityId,
           },
           service: {

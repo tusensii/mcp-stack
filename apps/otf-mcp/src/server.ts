@@ -12,6 +12,10 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_REFRESH_TOKEN?: string;
   GOOGLE_CALENDAR_ID?: string;
+  // Email address to attach as attendee on WO/PWO calendar blocks.
+  // Required for the calendar integration to activate; absence triggers
+  // the same graceful skip as missing GOOGLE_* secrets.
+  OTF_CALENDAR_ATTENDEE?: string;
 }
 
 export function buildServer(env: Env): McpServer {

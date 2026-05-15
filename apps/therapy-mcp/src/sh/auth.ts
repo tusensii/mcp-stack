@@ -18,15 +18,14 @@ import type {
   AppointmentsResponse,
 } from "./types.js";
 
-export const BASE_URL =
-  "https://YOUR_PRACTICE.sessionshealth.com";
-
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36";
 
 export interface AuthEnv {
   STC_EMAIL: string;
   STC_PASSWORD: string;
+  STC_BASE_URL: string;
+  PRACTITIONER_DISPLAY_NAME?: string;
 }
 
 // Module-scope caches: stable across requests within a Worker isolate, so
@@ -36,7 +35,7 @@ let cachedSession: Session | null = null;
 
 function buildAuth(env: AuthEnv): RailsAuthClient {
   return createRailsAuthClient({
-    baseUrl: BASE_URL,
+    baseUrl: env.STC_BASE_URL,
     email: env.STC_EMAIL,
     password: env.STC_PASSWORD,
     loginPath: "/clients/sign_in",
@@ -59,7 +58,7 @@ export function getAuth(env: AuthEnv): RailsAuthClient {
 export async function getSession(env: AuthEnv): Promise<Session> {
   if (cachedSession) return cachedSession;
   const auth = getAuth(env);
-  cachedSession = await loginAndDiscover(auth);
+  cachedSession = await loginAndDiscover(auth, env.STC_BASE_URL);
   return cachedSession;
 }
 
@@ -76,12 +75,15 @@ export function invalidateSession(): void {
  * availability_id and the bookable service_code_id (preferring CPT 90834,
  * Individual Therapy).
  */
-async function loginAndDiscover(auth: RailsAuthClient): Promise<Session> {
+async function loginAndDiscover(
+  auth: RailsAuthClient,
+  baseUrl: string,
+): Promise<Session> {
   // Step 1: GET /clients/me — also triggers the auth-rails lazy login.
   const me = await auth.json<ClientsMe>("/clients/me", {
     headers: {
       Accept: "application/json, text/javascript",
-      Referer: `${BASE_URL}/appointments`,
+      Referer: `${baseUrl}/appointments`,
     },
   });
 
@@ -95,6 +97,7 @@ async function loginAndDiscover(auth: RailsAuthClient): Promise<Session> {
   const { availabilityId, serviceCodeId } = await discoverBookingIds(
     auth,
     clientId,
+    baseUrl,
   );
 
   return {
@@ -111,21 +114,42 @@ async function loginAndDiscover(auth: RailsAuthClient): Promise<Session> {
 async function discoverBookingIds(
   auth: RailsAuthClient,
   clientId: number,
+  baseUrl: string,
 ): Promise<{ availabilityId: number; serviceCodeId: number }> {
   const data = await auth.json<AppointmentsResponse>(
     `/clients/${clientId}/appointments`,
     {
       headers: {
         Accept: "application/json, text/javascript",
-        Referer: `${BASE_URL}/appointments`,
+        Referer: `${baseUrl}/appointments`,
       },
     },
   );
 
-  // Find the OnlineBookingAvailability for this practitioner
-  const availability = data.availabilities.find(
-    (a) => a.type === "OnlineBookingAvailability",
+  // A practitioner can have multiple OnlineBookingAvailability records —
+  // e.g. one for free Consultations and one for paid Individual Therapy.
+  // Picking the first arbitrarily lands on the consultation flow and books
+  // the wrong service, which Sessions Health rejects with a 401 "not
+  // authorized" from a controller-level filter. Prefer the availability
+  // that contains CPT 90834 (Individual Therapy).
+  const individualTherapyCode = data.service_codes.find(
+    (sc) => sc.code === "90834",
   );
+
+  let availability = individualTherapyCode
+    ? data.availabilities.find(
+        (a) =>
+          a.type === "OnlineBookingAvailability" &&
+          a.services.some(
+            (s) => s.service_code_id === String(individualTherapyCode.id),
+          ),
+      )
+    : undefined;
+  if (!availability) {
+    availability = data.availabilities.find(
+      (a) => a.type === "OnlineBookingAvailability",
+    );
+  }
   if (!availability) {
     throw new Error(
       "Could not discover practitioner availability or service code. " +
@@ -133,14 +157,6 @@ async function discoverBookingIds(
     );
   }
 
-  // Find Individual Therapy service code (CPT 90834) from the availability's services
-  // service_code_id values in availability.services are strings in the API response
-  const individualTherapyCode = data.service_codes.find(
-    (sc) => sc.code === "90834",
-  );
-
-  // Prefer CPT 90834 (Individual Therapy) if it's in the availability's service list.
-  // If the practitioner changed service codes, fall back to the first available one.
   let serviceCodeId: number | undefined;
 
   if (individualTherapyCode) {

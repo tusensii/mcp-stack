@@ -12,7 +12,7 @@
  */
 
 import { HttpError } from "@mcp-stack/http-fetch";
-import { getAuth, BASE_URL } from "./auth.js";
+import { getAuth } from "./auth.js";
 import type { AuthEnv } from "./auth.js";
 
 export class ShApiError extends Error {
@@ -25,11 +25,23 @@ export class ShApiError extends Error {
   }
 }
 
-const COMMON_HEADERS: Record<string, string> = {
-  Accept: "application/json, text/javascript",
-  Origin: BASE_URL,
-  Referer: `${BASE_URL}/appointments`,
-};
+function commonHeaders(baseUrl: string): Record<string, string> {
+  return {
+    Accept: "application/json, text/javascript",
+    Origin: baseUrl,
+    Referer: `${baseUrl}/appointments`,
+  };
+}
+
+// Sessions Health rejects writes (POST/PATCH) with HTTP 401
+// "You are not authorized to make this request" unless the request is marked
+// as XHR. Reads work without it.
+function writeHeaders(baseUrl: string): Record<string, string> {
+  return {
+    "X-Requested-With": "XMLHttpRequest",
+    Referer: `${baseUrl}/appointments/request`,
+  };
+}
 
 function mapError(path: string, e: unknown): never {
   if (e instanceof HttpError) {
@@ -55,7 +67,7 @@ export async function shGet<T>(
   try {
     return await auth.json<T>(fullPath, {
       method: "GET",
-      headers: COMMON_HEADERS,
+      headers: commonHeaders(env.STC_BASE_URL),
     });
   } catch (e) {
     mapError(path, e);
@@ -72,7 +84,8 @@ export async function shPost<T>(
     return await auth.json<T>(path, {
       method: "POST",
       headers: {
-        ...COMMON_HEADERS,
+        ...commonHeaders(env.STC_BASE_URL),
+        ...writeHeaders(env.STC_BASE_URL),
         "Content-Type": "application/json; charset=UTF-8",
       },
       body: JSON.stringify(body),
@@ -91,7 +104,8 @@ export async function shPatch<T>(
   const init: RequestInit = {
     method: "PATCH",
     headers: {
-      ...COMMON_HEADERS,
+      ...commonHeaders(env.STC_BASE_URL),
+      ...writeHeaders(env.STC_BASE_URL),
       "Content-Type": "application/json; charset=UTF-8",
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

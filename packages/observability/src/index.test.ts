@@ -21,13 +21,13 @@ describe("logger", () => {
 
   it("emits structured JSON when DEBUG is 'true'", () => {
     const log = logger({ DEBUG: "true" });
-    log.info("hello", { user: "chris" });
+    log.info("hello", { user: "alice" });
     expect(logSpy).toHaveBeenCalledOnce();
     const arg = logSpy.mock.calls[0]?.[0] as string;
     const entry = JSON.parse(arg) as { level: string; msg: string; fields: { user: string } };
     expect(entry.level).toBe("info");
     expect(entry.msg).toBe("hello");
-    expect(entry.fields.user).toBe("chris");
+    expect(entry.fields.user).toBe("alice");
   });
 
   it("ignores non-truthy values for the env flags", () => {

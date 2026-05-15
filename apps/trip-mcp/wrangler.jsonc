@@ -1,0 +1,20 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "trip-mcp",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-04-19",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true
+	},
+	"workers_dev": true,
+	"preview_urls": false,
+	"kv_namespaces": [
+		{
+			"binding": "CACHE",
+			"id": "f38a96742eb24177943805cd2e177795"
+		}
+	]
+}

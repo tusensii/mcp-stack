@@ -76,6 +76,8 @@ export interface RailsAuthClient {
   json<T>(path: string, init?: RequestInit): Promise<T>;
   /** Drop the cached session so the next call re-runs the login flow. */
   invalidateSession(): void;
+  /** Read a cookie value from the jar (for apps that need double-submit CSRF). */
+  getCookie(name: string): string | undefined;
 }
 
 /**
@@ -205,7 +207,52 @@ export function createRailsAuthClient(options: RailsAuthOptions): RailsAuthClien
     const expired = res.status === 401 || redirectedToLogin;
 
     if (expired) {
-      if (attempt >= 1) throw new AuthExpired("Re-authentication failed");
+      if (attempt >= 1) {
+        const location = res.headers.get("Location") ?? "";
+        const setCookieRaw =
+          (res.headers as Headers & { getSetCookie?: () => string[] })
+            .getSetCookie?.() ?? [];
+        const setCookieNames = setCookieRaw
+          .map((c) => c.split("=")[0])
+          .join(",");
+        let body = "";
+        try {
+          body = (await res.clone().text()).slice(0, 300);
+        } catch {
+          // ignore
+        }
+        const method = (init.method ?? "GET").toUpperCase();
+        const sentHeaderNames = [...headers.keys()].join(",");
+        const sentCsrf = headers.get("X-CSRF-Token") ?? "";
+        const sentCsrfLen = sentCsrf.length;
+        const sentCsrfPrefix = sentCsrf.slice(0, 8);
+        const metaCsrfPrefix = (csrfToken ?? "").slice(0, 8);
+        const cookieCsrf = http.jar.get("_csrftoken") ?? "";
+        const cookieCsrfPrefix = cookieCsrf.slice(0, 8);
+        const cookieCsrfLen = cookieCsrf.length;
+        const signedIn = http.jar.get("signed_in") ?? "<absent>";
+        const sentCookieNames = http.jar
+          .toHeader()
+          .split(";")
+          .map((c) => (c.split("=")[0] ?? "").trim())
+          .filter(Boolean)
+          .join(",");
+        throw new AuthExpired(
+          `Re-authentication failed: ${method} ${path} → status=${res.status} ` +
+            `location=${location || "<none>"} ` +
+            `resp-set-cookie-names=[${setCookieNames}] ` +
+            `req-header-names=[${sentHeaderNames}] ` +
+            `req-csrf-len=${sentCsrfLen} ` +
+            `req-csrf-prefix=${sentCsrfPrefix} ` +
+            `meta-csrf-prefix=${metaCsrfPrefix} ` +
+            `cookie-csrf-prefix=${cookieCsrfPrefix} ` +
+            `cookie-csrf-len=${cookieCsrfLen} ` +
+            `signed-in=${signedIn} ` +
+            `req-cookie-names=[${sentCookieNames}] ` +
+            `jar-size=${http.jar.size} ` +
+            `body=${body ? JSON.stringify(body) : "<empty>"}`,
+        );
+      }
       invalidateSession();
       return authenticatedFetch(path, init, attempt + 1);
     }
@@ -226,6 +273,7 @@ export function createRailsAuthClient(options: RailsAuthOptions): RailsAuthClien
     fetch: authenticatedFetch,
     json: authenticatedJson,
     invalidateSession,
+    getCookie: (name) => http.jar.get(name),
   };
 }
 
