@@ -1,26 +1,24 @@
 # mcp-stack
 
-Five Model Context Protocol servers — Oura, Orangetheory, a therapy practice
-portal, Gmail, and PNW backpacking research — built on Cloudflare Workers
-and a small set of shared TypeScript primitives. One pnpm monorepo, 52 tools,
-~3000 lines of app code on top of ~1500 lines of reusable auth + HTTP +
-observability packages.
+Three Model Context Protocol servers — Oura, Gmail, and PNW backpacking
+research — built on Cloudflare Workers and a small set of shared TypeScript
+primitives. One pnpm monorepo, 37 tools, ~2000 lines of app code on top of
+~1500 lines of reusable auth + HTTP + observability packages.
 
 ## Why this exists
 
 I wanted a real test of the "build your own MCP" pattern across surface areas
 that don't share an auth model: a public PAT API (Oura), a refresh-token
-OAuth flow (Gmail, Google Calendar), an AWS Cognito refresh flow with
-out-of-band SRP bootstrap (OTF), a Devise/Rails session-cookie portal
-(Sessions Health), and a half-dozen no-auth public APIs (NWS, NPS, USGS,
-WSDOT, etc.).
+OAuth flow (Gmail), and a half-dozen no-auth public APIs aggregated under a
+single research tool (NWS, NPS, USGS, WSDOT, RIDB, OSM, WTA, …).
 
 The shared packages exist because the *third* time I wrote
-"cookie jar + retries + 5xx backoff + Retry-After", I extracted it. Same
-story for the auth packages: each captures a flow that took real
-trial-and-error to get right (the two-token Rails CSRF rotation, the
-Cognito-SRP-in-Workers impossibility, the OAuth JSON-shape variance). Adding
-a sixth MCP should be a wire-up exercise, not a rebuild.
+"cookie jar + retries + 5xx backoff + Retry-After", I extracted it. The
+auth packages each capture a flow that took real trial-and-error to get
+right (OAuth refresh-token JSON-shape variance, static-PAT header
+injection, and — in a private sibling repo — Devise/Rails dual-CSRF and
+AWS Cognito SRP bootstrap). Adding the next MCP should be a wire-up
+exercise, not a rebuild.
 
 It's also a portfolio piece. The architecture choices, the per-app trade-offs,
 and the discipline around secrets, types, and bundle size are the work.
@@ -33,15 +31,13 @@ mcp-stack/
 │   ├── mcp-core             # path-secret check + thin wrapper over @modelcontextprotocol/sdk + agents
 │   ├── http-fetch           # fetch wrapper: per-instance cookie jar, retries, timeouts, typed errors
 │   ├── auth-rails           # Devise-style sign-in: form CSRF → POST → meta CSRF, auto re-auth on 401
-│   ├── auth-cognito         # AWS Cognito refresh-token flow (SRP bootstrap lives in apps/otf-mcp/scripts/)
+│   ├── auth-cognito         # AWS Cognito refresh-token flow
 │   ├── auth-oauth-google    # configured OAuth2Client from google-auth-library
 │   ├── auth-bearer          # static PAT header injection
 │   ├── shared-types         # cross-MCP types (Location, TimeWindow, BookingStatus)
 │   └── observability        # structured JSON logger gated on DEBUG / OBSERVABILITY env flags
 └── apps/                    # one Worker per app, each independent at runtime
     ├── oura-mcp             # 22 tools — raw Oura v2 + analytics layer
-    ├── otf-mcp              # 9 tools  — Orangetheory booking + Google Calendar blocks
-    ├── therapy-mcp          # 6 tools  — Sessions Health (Rails) portal
     ├── gmail-mcp            # 6 tools  — Gmail read/compose/labels/filters
     └── trip-mcp             # 9 tools  — PNW backpacking research (NWS, NPS, RIDB, WTA, OSM, ...)
 ```
@@ -50,13 +46,18 @@ Apps import from `packages/*` via pnpm workspace resolution. Wrangler bundles
 each app independently — no cross-app shared state, no shared KV, no shared
 Durable Objects. Secrets live per-Worker.
 
+`auth-rails` and `auth-cognito` are exercised by private MCPs not included
+in this public repo (the consumer apps are reverse-engineered HTTP clients
+against vendors with no public API, kept out of public source for
+terms-of-service reasons). The packages themselves are generic — `auth-rails`
+works against any Devise app; `auth-cognito` against any Cognito user pool
+where SRP bootstrap is done out-of-band.
+
 ## Tools by app
 
 See each Worker's README for the full tool list and deploy steps:
 
 - [`apps/oura-mcp`](apps/oura-mcp/README.md) — sleep, readiness, activity, HRV, plus baseline-compare / correlation / anomaly-detection / weekly-digest analytics
-- [`apps/otf-mcp`](apps/otf-mcp/README.md) — search studios, book/cancel classes, performance trends, optional calendar integration
-- [`apps/therapy-mcp`](apps/therapy-mcp/README.md) — list/book/reschedule/cancel appointments via Sessions Health
 - [`apps/gmail-mcp`](apps/gmail-mcp/README.md) — list/get/compose/modify/delete emails, manage labels and server-side filters
 - [`apps/trip-mcp`](apps/trip-mcp/README.md) — research_trip orchestrator + permits/weather/conditions/route-info/safety/web-search
 
@@ -85,8 +86,6 @@ in each app names the Worker and compatibility flags but holds no secrets.
 
 ```bash
 pnpm deploy:oura
-pnpm deploy:otf
-pnpm deploy:therapy
 pnpm deploy:gmail
 pnpm deploy:trip
 ```

@@ -12,8 +12,6 @@
     "test": "pnpm -r test",
     "build": "echo 'no build at root; each app builds via wrangler'",
     "deploy:oura": "pnpm --filter oura-mcp deploy",
-    "deploy:otf": "pnpm --filter otf-mcp deploy",
-    "deploy:therapy": "pnpm --filter therapy-mcp deploy",
     "deploy:gmail": "pnpm --filter gmail-mcp deploy",
     "deploy:trip": "pnpm --filter trip-mcp deploy"
   },

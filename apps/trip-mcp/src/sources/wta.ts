@@ -154,7 +154,23 @@ function stripTags(s: string): string {
 
 function absUrl(href: string): string {
   if (!href) return href;
-  if (/^https?:\/\//i.test(href)) return href;
+  // SSRF guard: WTA HTML is user-submitted; an attacker who plants a
+  // link in a trip report could otherwise coerce the Worker into
+  // fetching arbitrary URLs (the detail-fetch path uses absUrl output
+  // directly as a fetch target). Constrain to the WTA host: absolute
+  // URLs off-host are rewritten to their path-only form anchored at
+  // BASE, so off-site links surface as broken WTA paths rather than
+  // becoming live request targets.
+  if (/^https?:\/\//i.test(href)) {
+    try {
+      const u = new URL(href);
+      const baseHost = new URL(BASE).host;
+      if (u.host === baseHost) return href;
+      return `${BASE}${u.pathname}${u.search}`;
+    } catch {
+      return BASE;
+    }
+  }
   if (href.startsWith("/")) return BASE + href;
   return `${BASE}/${href}`;
 }
