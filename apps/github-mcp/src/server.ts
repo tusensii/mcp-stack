@@ -12,6 +12,20 @@ export interface Env {
    * Optional — without it, every tool call must pass `repo`.
    */
   GITHUB_DEFAULT_REPO?: string;
+  /**
+   * Comma-separated label names automatically applied to every issue created
+   * via `github_create_issue`. Merged with caller-supplied labels (deduped).
+   * Optional — empty/unset means no default labels.
+   */
+  GITHUB_DEFAULT_LABELS?: string;
+}
+
+function parseDefaultLabels(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 export function buildServer(env: Env): McpServer {
@@ -21,7 +35,7 @@ export function buildServer(env: Env): McpServer {
   });
 
   const client = new GitHubClient(env.GITHUB_TOKEN);
-  registerAllTools(server, client, env.GITHUB_DEFAULT_REPO);
+  registerAllTools(server, client, env.GITHUB_DEFAULT_REPO, parseDefaultLabels(env.GITHUB_DEFAULT_LABELS));
 
   return server;
 }

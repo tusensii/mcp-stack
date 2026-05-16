@@ -12,7 +12,13 @@ export function registerIssueTools(
   server: McpServer,
   client: GitHubClient,
   defaultRepo: string | undefined,
+  defaultLabels: string[],
 ): void {
+  const createIssueLabelsDesc =
+    defaultLabels.length > 0
+      ? `Label names to apply. Merged with deployment defaults [${defaultLabels.join(", ")}] (deduped).`
+      : "Label names to apply.";
+
   server.tool(
     "github_create_issue",
     "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional.",
@@ -20,18 +26,19 @@ export function registerIssueTools(
       repo: repoArg,
       title: z.string().min(1).describe("Issue title."),
       body: z.string().optional().describe("Markdown body."),
-      labels: z.array(z.string()).optional().describe("Label names to apply."),
+      labels: z.array(z.string()).optional().describe(createIssueLabelsDesc),
       assignees: z.array(z.string()).optional().describe("GitHub usernames to assign."),
       milestone: z.number().int().optional().describe("Milestone number (not title)."),
     },
     async ({ repo, title, body, labels, assignees, milestone }) => {
       const r = resolveRepo(repo, defaultRepo);
       if ("error" in r) return r.error;
+      const mergedLabels = Array.from(new Set([...defaultLabels, ...(labels ?? [])]));
       try {
         const issue = await client.post<unknown>(`/repos/${r.owner}/${r.repo}/issues`, {
           title,
           ...(body !== undefined ? { body } : {}),
-          ...(labels ? { labels } : {}),
+          ...(mergedLabels.length > 0 ? { labels: mergedLabels } : {}),
           ...(assignees ? { assignees } : {}),
           ...(milestone !== undefined ? { milestone } : {}),
         });
