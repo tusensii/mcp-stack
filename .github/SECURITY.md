@@ -19,6 +19,8 @@ In scope:
 - The `MCP_PATH_SECRET` gating in `packages/mcp-core` (constant-time compare,
   path parsing).
 - Credential-handling logic in any app.
+- Path-injection or argument-injection in `apps/github-mcp` tools (repo
+  resolver regex, label encoding, etc.).
 - Transitive-dependency CVEs not already pinned via `pnpm.overrides` in the
   root `package.json`.
 

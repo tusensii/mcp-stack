@@ -26,6 +26,27 @@ importers:
         specifier: ^4.85.0
         version: 4.85.0(@cloudflare/workers-types@4.20260426.1)
 
+  apps/github-mcp:
+    dependencies:
+      '@mcp-stack/auth-bearer':
+        specifier: workspace:*
+        version: link:../../packages/auth-bearer
+      '@mcp-stack/http-fetch':
+        specifier: workspace:*
+        version: link:../../packages/http-fetch
+      '@mcp-stack/mcp-core':
+        specifier: workspace:*
+        version: link:../../packages/mcp-core
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
+      agents:
+        specifier: ^0.11.6
+        version: 0.11.6(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@cloudflare/workers-types@4.20260426.1)(ai@6.0.168(zod@3.25.76))(react@19.2.5)(rolldown@1.0.0-rc.17)(vite@8.0.10(esbuild@0.27.3)(tsx@4.21.0))(zod@3.25.76)
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+
   apps/gmail-mcp:
     dependencies:
       '@mcp-stack/auth-oauth-google':

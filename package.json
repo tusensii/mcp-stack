@@ -13,7 +13,8 @@
     "build": "echo 'no build at root; each app builds via wrangler'",
     "deploy:oura": "pnpm --filter oura-mcp deploy",
     "deploy:gmail": "pnpm --filter gmail-mcp deploy",
-    "deploy:trip": "pnpm --filter trip-mcp deploy"
+    "deploy:trip": "pnpm --filter trip-mcp deploy",
+    "deploy:github": "pnpm --filter github-mcp deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260426.1",

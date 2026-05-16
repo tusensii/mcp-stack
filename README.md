@@ -1,9 +1,10 @@
 # mcp-stack
 
-Three Model Context Protocol servers — Oura, Gmail, and PNW backpacking
-research — built on Cloudflare Workers and a small set of shared TypeScript
-primitives. One pnpm monorepo, 37 tools, ~2000 lines of app code on top of
-~1500 lines of reusable auth + HTTP + observability packages.
+Four Model Context Protocol servers — Oura, Gmail, PNW backpacking
+research, and GitHub Issues — built on Cloudflare Workers and a small set
+of shared TypeScript primitives. One pnpm monorepo, 54 tools, ~2500 lines
+of app code on top of ~1500 lines of reusable auth + HTTP + observability
+packages.
 
 ## Why this exists
 
@@ -39,7 +40,8 @@ mcp-stack/
 └── apps/                    # one Worker per app, each independent at runtime
     ├── oura-mcp             # 22 tools — raw Oura v2 + analytics layer
     ├── gmail-mcp            # 6 tools  — Gmail read/compose/labels/filters
-    └── trip-mcp             # 9 tools  — PNW backpacking research (NWS, NPS, RIDB, WTA, OSM, ...)
+    ├── trip-mcp             # 9 tools  — PNW backpacking research (NWS, NPS, RIDB, WTA, OSM, ...)
+    └── github-mcp           # 17 tools — full GitHub Issues management; queue for Claude Code self-repair
 ```
 
 Apps import from `packages/*` via pnpm workspace resolution. Wrangler bundles
@@ -60,6 +62,7 @@ See each Worker's README for the full tool list and deploy steps:
 - [`apps/oura-mcp`](apps/oura-mcp/README.md) — sleep, readiness, activity, HRV, plus baseline-compare / correlation / anomaly-detection / weekly-digest analytics
 - [`apps/gmail-mcp`](apps/gmail-mcp/README.md) — list/get/compose/modify/delete emails, manage labels and server-side filters
 - [`apps/trip-mcp`](apps/trip-mcp/README.md) — research_trip orchestrator + permits/weather/conditions/route-info/safety/web-search
+- [`apps/github-mcp`](apps/github-mcp/README.md) — issues CRUD + comments + labels + assignees + cross-repo search; powers the [issue-driven self-repair workflow](CLAUDE.md)
 
 ## Local development
 
@@ -88,6 +91,7 @@ in each app names the Worker and compatibility flags but holds no secrets.
 pnpm deploy:oura
 pnpm deploy:gmail
 pnpm deploy:trip
+pnpm deploy:github
 ```
 
 Each is a thin alias for `pnpm --filter <app> deploy`, which runs
