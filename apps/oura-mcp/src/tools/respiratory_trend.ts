@@ -50,7 +50,8 @@ export function registerRespiratoryTrendTool(server: McpServer, client: OuraClie
       "Use this tool for respiratory-rate trends and elevated-breathing-rate analysis. " +
       "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
       "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (case-insensitive). " +
-      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}.",
+      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}. " +
+      "Dates: \"date\" is the date the sleep period started (sourced from the sleep period's `day` field), NOT the morning the metric is reported on. This matches oura_hrv_trend's convention but differs from oura_daily_readiness/oura_daily_sleep — beware of off-by-one alignment when correlating across tools.",
     {
       start_date: z
         .string()

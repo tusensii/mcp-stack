@@ -9,7 +9,8 @@ export function registerSessionTools(server: McpServer, client: OuraClient): voi
   server.tool(
     "oura_sessions",
     "Returns mindfulness and rest sessions: meditation, breathing, nap, relaxation, rest. " +
-      "Includes type, start/end datetime, mood rating, and HRV/HR sample arrays.",
+      "Includes type, start/end datetime, mood rating, and HRV/HR sample arrays. " +
+      "Dates: \"day\" is the calendar day the session occurred (derived from start_datetime).",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

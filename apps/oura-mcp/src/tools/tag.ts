@@ -10,7 +10,8 @@ export function registerTagTools(server: McpServer, client: OuraClient): void {
     "oura_tags",
     "Returns user-created tags (enhanced format). " +
       "Each tag has a start_day, tag_type_code, optional comment text, " +
-      "optional custom_name, and start/end times.",
+      "optional custom_name, and start/end times. " +
+      "Dates: \"start_day\"/\"end_day\" are the calendar days the tag covers (when the user logged the event); the date-range filter matches against start_day.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

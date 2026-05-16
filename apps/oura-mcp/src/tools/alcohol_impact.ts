@@ -68,7 +68,8 @@ export function registerAlcoholImpactTool(server: McpServer, client: OuraClient)
     "Compares biometrics (HRV, deep sleep, RHR, readiness, sleep latency) between " +
       "alcohol-tagged days and non-alcohol days. Also estimates how many days HRV " +
       "takes to recover after an alcohol day. Tag is auto-discovered by name match " +
-      "unless alcohol_tag_name is provided.",
+      "unless alcohol_tag_name is provided. " +
+      "Dates: alcohol days are identified by tag start_day; biometrics (HRV, deep_sleep, RHR, sleep_latency) are bucketed by sleep-period-start date; readiness is bucketed by morning-of-report date. These conventions can shift the same physiological night by a day across categories — interpret recovery_pattern (offset days) as approximate.",
     {
       date_range: z
         .object({ start: z.string(), end: z.string() })

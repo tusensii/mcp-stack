@@ -11,7 +11,8 @@ export function registerHeartrateTools(server: McpServer, client: OuraClient): v
     "Returns time-series heart rate samples as { bpm, source, timestamp } objects. " +
       "source is one of: awake, rest, sleep, session, live, workout. " +
       "Timestamps are ISO 8601. Samples are ~5-minute intervals during rest/sleep. " +
-      "Default cap: 24-hour window. To query longer windows, set max_pages explicitly.",
+      "Default cap: 24-hour window. To query longer windows, set max_pages explicitly. " +
+      "Timestamps: each sample's `timestamp` is the wall-clock instant the reading was taken (ISO 8601 with offset); no per-sample date field — derive a date from the timestamp if needed.",
     {
       start_datetime: z
         .string()

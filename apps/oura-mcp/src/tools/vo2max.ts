@@ -9,7 +9,8 @@ export function registerVo2MaxTools(server: McpServer, client: OuraClient): void
   server.tool(
     "oura_vo2_max",
     "Returns VO2 max estimates (mL/kg/min) as calculated by Oura. " +
-      "Updates infrequently — monthly or after significant training changes.",
+      "Updates infrequently — monthly or after significant training changes. " +
+      "Dates: \"day\" is the calendar day the VO2 max estimate was computed/reported on.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

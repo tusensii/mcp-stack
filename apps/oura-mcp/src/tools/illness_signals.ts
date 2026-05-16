@@ -137,7 +137,8 @@ export function registerIllnessSignalsTool(server: McpServer, client: OuraClient
       "(2) elevated temperature OR respiratory rate >+10% OR readiness_score < 50 => zone_2_only; " +
       "(3) HRV < -25% vs baseline OR RHR > +10% vs baseline => moderate; " +
       "(4) otherwise => unrestricted. " +
-      "fallback='latest' (default) reuses the most recent prior day with data when the target date is missing; fallback='strict' returns nulls for missing data.",
+      "fallback='latest' (default) reuses the most recent prior day with data when the target date is missing; fallback='strict' returns nulls for missing data. " +
+      "Dates: \"date\" is interpreted against each underlying metric's native convention — body temperature deviation and readiness score use the morning-of-report date; HRV, RHR, and respiratory rate are sourced from the sleep period whose `day` matches that date (sleep-period-start convention). Pick whichever date aligns with how you mentally label the night in question; off-by-one across conventions is possible.",
     {
       date: z
         .string()

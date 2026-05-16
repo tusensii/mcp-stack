@@ -73,7 +73,8 @@ export function registerReadinessTools(server: McpServer, client: OuraClient): v
       "are omitted when the underlying data is unavailable. " +
       "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
       "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (exact, case-insensitive). " +
-      "When set, each row gets a `tags` array of {name, comment?, timestamp?}.",
+      "When set, each row gets a `tags` array of {name, comment?, timestamp?}. " +
+      "Dates: \"day\" is the morning the readiness score is reported on (reflecting the overnight sleep ending that morning). Note: raw_values pulls from the sleep period whose `day` matches this date, which uses a different convention in oura_sleep_detail/oura_hrv_trend (sleep-period-start date) — within this tool the alignment is handled internally, but be aware when cross-referencing.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

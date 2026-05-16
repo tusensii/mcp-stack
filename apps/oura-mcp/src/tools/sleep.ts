@@ -39,7 +39,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     "oura_daily_sleep",
     "Returns daily sleep scores and contributor breakdown for a date range. " +
       "Score is 0-100. Contributor values are 0-100. " +
-      "Does NOT include raw stage durations — use oura_sleep_detail for that.",
+      "Does NOT include raw stage durations — use oura_sleep_detail for that. " +
+      "Dates: \"day\" is the morning the sleep score is reported on (i.e. the sleep period ending that morning).",
     dateRangeSchema,
     async ({ start_date, end_date, max_pages }) => {
       const range = resolveDateRange(start_date, end_date);
@@ -60,7 +61,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     "Returns detailed per-period sleep data including stage durations (seconds), " +
       "average and lowest heart rate (bpm), average HRV (ms RMSSD), sleep latency (seconds), " +
       "efficiency (0-100), and bedtime start/end. " +
-      "All duration fields are in SECONDS, not minutes.",
+      "All duration fields are in SECONDS, not minutes. " +
+      "Dates: \"day\" is the date the sleep period started (the evening you went to bed); the sleep period ends the following morning.",
     dateRangeSchema,
     async ({ start_date, end_date, max_pages }) => {
       const range = resolveDateRange(start_date, end_date);
@@ -79,7 +81,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
   server.tool(
     "oura_sleep_time_recommendation",
     "Returns Oura's recommended sleep time window and status for each day. " +
-      "Includes optimal_bedtime offsets (minutes from midnight) and recommendation label.",
+      "Includes optimal_bedtime offsets (minutes from midnight) and recommendation label. " +
+      "Dates: \"day\" is the date the recommendation applies to (the evening of that calendar day).",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
@@ -108,7 +111,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       "This is the best tool for HRV trends and cardiovascular recovery analysis. " +
       "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
       "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (case-insensitive). " +
-      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}.",
+      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}. " +
+      "Dates: \"date\" is the date the sleep period started (sourced from the underlying sleep period's `day` field), NOT the morning the score is reported on. This differs from oura_daily_readiness/oura_daily_sleep, which key on the morning-of-report date — beware of off-by-one alignment when correlating across tools.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

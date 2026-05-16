@@ -14,7 +14,8 @@ export function registerSummaryTools(server: McpServer, client: OuraClient): voi
     "Convenience tool: fetches today's and yesterday's sleep score, readiness score, " +
       "and activity score in parallel. Returns a compact merged object keyed by date. " +
       "Use this as the first tool when the user asks 'how am I doing?' or wants a daily overview. " +
-      "Timezone: America/Los_Angeles.",
+      "Timezone: America/Los_Angeles. " +
+      "Dates: keys in `dates` are morning-of-report dates (sleep score, readiness score, activity score all use this convention).",
     {},
     async () => {
       const today = todayInTz();

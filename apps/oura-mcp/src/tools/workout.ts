@@ -10,7 +10,8 @@ export function registerWorkoutTools(server: McpServer, client: OuraClient): voi
     "oura_workouts",
     "Returns logged and auto-detected workouts. " +
       "Fields include: activity type, start/end datetime, calories, distance (meters), " +
-      "intensity (easy/moderate/hard), source (manual/confirmed/detected), and steps.",
+      "intensity (easy/moderate/hard), source (manual/confirmed/detected), and steps. " +
+      "Dates: \"day\" is the calendar day the workout occurred (derived from start_datetime).",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
