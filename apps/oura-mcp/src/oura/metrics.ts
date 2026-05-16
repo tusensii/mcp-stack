@@ -26,8 +26,75 @@ import {
   getDailyActivity,
   getDailySpo2,
   getSleepPeriods,
+  getEnhancedTags,
 } from "./endpoints.js";
 import type { SleepPeriod } from "./types.js";
+
+// ---------------------------------------------------------------------------
+// Tag overlay helper (shared by readiness / hrv_trend / respiratory_trend)
+// ---------------------------------------------------------------------------
+
+/**
+ * Lightweight tag projection attached to per-date trend rows when callers
+ * pass `overlay_tags`. Matches the field shape exposed by `oura_tags`: name,
+ * optional comment, optional timestamp. Comment/timestamp are omitted (not
+ * nulled) when Oura did not record them.
+ */
+export interface TagEntry {
+  name: string;
+  comment?: string;
+  timestamp?: string;
+}
+
+/**
+ * `overlay_tags` parameter accepts:
+ *   - true       → attach every tag falling on each date
+ *   - string[]   → attach only tags whose name matches one of the listed
+ *                  names (exact, case-insensitive)
+ *   - false/undef → no tags, no extra API call (handled by callers)
+ */
+export type OverlayTagsFilter = boolean | string[];
+
+/**
+ * Display name for a tag. Oura's enhanced_tag endpoint exposes a
+ * `tag_type_code` (e.g. "tag_generic_alcohol") and an optional
+ * `custom_name`. We prefer `custom_name` when set, otherwise fall back to
+ * the type code. Mirrors the shape callers see from `oura_tags`.
+ */
+function tagDisplayName(t: { tag_type_code: string; custom_name: string | null }): string {
+  return t.custom_name ?? t.tag_type_code;
+}
+
+/**
+ * Fetch all tags overlapping `[start, end]` in a SINGLE paginated call and
+ * return a date-keyed map. When `filter` is a string[], only tags whose
+ * display name matches one of the entries (case-insensitive) are kept.
+ */
+export async function fetchTagsByDay(
+  client: OuraClient,
+  start: string,
+  end: string,
+  filter: OverlayTagsFilter,
+): Promise<Map<string, TagEntry[]>> {
+  const out = new Map<string, TagEntry[]>();
+  if (filter === false) return out;
+  const names =
+    Array.isArray(filter)
+      ? new Set(filter.map((n) => n.toLowerCase()))
+      : null;
+  const tags = await getEnhancedTags(client, { start_date: start, end_date: end });
+  for (const t of tags) {
+    const name = tagDisplayName(t);
+    if (names && !names.has(name.toLowerCase())) continue;
+    const entry: TagEntry = { name };
+    if (t.comment) entry.comment = t.comment;
+    if (t.start_time) entry.timestamp = t.start_time;
+    const list = out.get(t.start_day) ?? [];
+    list.push(entry);
+    out.set(t.start_day, list);
+  }
+  return out;
+}
 
 export const METRIC_NAMES = [
   "readiness",

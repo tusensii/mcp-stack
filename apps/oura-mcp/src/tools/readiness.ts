@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailyReadiness, getSleepPeriods } from "../oura/endpoints.js";
-import { addDays } from "../oura/metrics.js";
+import { addDays, fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 import { defined, mean } from "../oura/stats.js";
 import type { DailyReadiness, SleepPeriod } from "../oura/types.js";
 import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
@@ -70,13 +70,22 @@ export function registerReadinessTools(server: McpServer, client: OuraClient): v
       "biometrics (rhr_bpm, hrv_ms, body_temperature_deviation_c, resp_rate) " +
       "sourced from the main overnight sleep period, plus rolling 14-day " +
       "baselines (rhr_baseline, hrv_baseline, resp_rate_baseline). Fields " +
-      "are omitted when the underlying data is unavailable.",
+      "are omitted when the underlying data is unavailable. " +
+      "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
+      "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (exact, case-insensitive). " +
+      "When set, each row gets a `tags` array of {name, comment?, timestamp?}.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
       max_pages: z.number().int().min(1).max(20).optional().describe("Max pagination pages (default 5)."),
+      overlay_tags: z
+        .union([z.boolean(), z.array(z.string()).min(1)])
+        .optional()
+        .describe(
+          "Attach user tags to each row. `true` = all tags; string[] = filter by tag name (case-insensitive exact match). Omit/false = no tags.",
+        ),
     },
-    async ({ start_date, end_date, max_pages }) => {
+    async ({ start_date, end_date, max_pages, overlay_tags }) => {
       const range = resolveDateRange(start_date, end_date);
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
@@ -130,6 +139,20 @@ export function registerReadinessTools(server: McpServer, client: OuraClient): v
 
           return { ...r, raw_values: raw };
         });
+
+        if (overlay_tags) {
+          const tagsByDay = await fetchTagsByDay(
+            client,
+            range.start_date,
+            range.end_date,
+            overlay_tags,
+          );
+          const withTags = enriched.map((r) => ({
+            ...r,
+            tags: (tagsByDay.get(r.day) ?? []) as TagEntry[],
+          }));
+          return textContent(withTags);
+        }
 
         return textContent(enriched);
       } catch (e) {
