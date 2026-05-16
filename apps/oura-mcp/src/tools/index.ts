@@ -22,6 +22,9 @@ import { registerAnomalyDetectTool } from "./anomaly_detect.js";
 import { registerRecoveryForecastTool } from "./recovery_forecast.js";
 import { registerAlcoholImpactTool } from "./alcohol_impact.js";
 import { registerWeeklyDigestTool } from "./weekly_digest.js";
+import { registerRespiratoryTrendTool } from "./respiratory_trend.js";
+import { registerIllnessSignalsTool } from "./illness_signals.js";
+import { registerSymptomOnsetDetectTool } from "./symptom_onset_detect.js";
 
 export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerPersonalTools(server, client);
@@ -46,4 +49,7 @@ export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerRecoveryForecastTool(server, client);
   registerAlcoholImpactTool(server, client);
   registerWeeklyDigestTool(server, client);
+  registerRespiratoryTrendTool(server, client);
+  registerIllnessSignalsTool(server, client);
+  registerSymptomOnsetDetectTool(server, client);
 }
