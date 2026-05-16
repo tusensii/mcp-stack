@@ -22,7 +22,12 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
     "oura_baseline_compare",
     "Compares a single day's metric value against the user's personal rolling baseline. " +
       "Returns z-score, percentile, delta vs baseline mean, and a categorical interpretation. " +
-      "Baseline window excludes the comparison date itself.",
+      "Baseline window excludes the comparison date itself. " +
+      "When `fallback: \"latest\"`, if the requested date has no data, the tool scans " +
+      "backward up to 7 days for the most recent reading and returns it (with " +
+      "`actual_date_used` and `days_lag` in the response). The baseline window itself " +
+      "remains anchored to the requested date. Default `fallback: \"strict\"` preserves " +
+      "the no-data error behavior.",
     {
       metric: z.enum(METRIC_NAMES).describe("Metric to compare against personal baseline."),
       date: z
@@ -36,10 +41,19 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
         .max(365)
         .optional()
         .describe("How many prior days form the baseline. Default 30."),
+      fallback: z
+        .enum(["strict", "latest"])
+        .optional()
+        .describe(
+          "How to handle missing data on the requested date. " +
+            "\"strict\" (default) returns current_value: null with an error. " +
+            "\"latest\" scans backward up to 7 days for the most recent reading.",
+        ),
     },
-    async ({ metric, date, baseline_window_days }) => {
+    async ({ metric, date, baseline_window_days, fallback }) => {
       const compareDate = date ?? todayInTz();
       const windowDays = baseline_window_days ?? 30;
+      const fallbackMode = fallback ?? "strict";
       const baselineStart = addDays(compareDate, -windowDays);
       const baselineEnd = addDays(compareDate, -1);
 
@@ -59,7 +73,35 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
           compareDate,
         );
 
-        const currentValue = todaySeries.get(compareDate) ?? null;
+        let currentValue = todaySeries.get(compareDate) ?? null;
+        let actualDateUsed: string | null = null;
+        let daysLag: number | null = null;
+
+        // If the requested date is missing data and the caller opted in to
+        // "latest" fallback, scan backward up to 7 days for the most recent
+        // non-null reading. One window fetch covers the whole scan.
+        if (currentValue === null && fallbackMode === "latest") {
+          const FALLBACK_DAYS = 7;
+          const fallbackStart = addDays(compareDate, -FALLBACK_DAYS);
+          const fallbackEnd = addDays(compareDate, -1);
+          const fallbackSeries = await fetchMetricByDay(
+            client,
+            metric,
+            fallbackStart,
+            fallbackEnd,
+          );
+          for (let i = 1; i <= FALLBACK_DAYS; i++) {
+            const probeDate = addDays(compareDate, -i);
+            const v = fallbackSeries.get(probeDate);
+            if (v !== null && v !== undefined) {
+              currentValue = v;
+              actualDateUsed = probeDate;
+              daysLag = i;
+              break;
+            }
+          }
+        }
+
         const baselineValues = defined([...baselineSeries.values()]);
         const nDays = baselineValues.length;
 
@@ -119,6 +161,10 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
           interpretation,
           baseline_window: { start: baselineStart, end: baselineEnd, n_days: nDays },
         };
+        if (actualDateUsed !== null) {
+          result.actual_date_used = actualDateUsed;
+          result.days_lag = daysLag;
+        }
         if (note) result.note = note;
         return textContent(result);
       } catch (e) {
