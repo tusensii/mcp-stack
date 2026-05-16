@@ -69,6 +69,17 @@ function tagDisplayName(t: { tag_type_code: string; custom_name: string | null }
  * Fetch all tags overlapping `[start, end]` in a SINGLE paginated call and
  * return a date-keyed map. When `filter` is a string[], only tags whose
  * display name matches one of the entries (case-insensitive) are kept.
+ *
+ * The Oura `/enhanced_tag` endpoint filters server-side using a UTC-derived
+ * comparison on `start_time`, not on the tag's `start_day` field. A tag
+ * whose `start_day` falls inside `[start, end]` can still be dropped from
+ * the response if its `start_time`, converted to UTC, lands on the next
+ * (or previous) calendar day — e.g. an evening 2026-04-11 tag in -07:00
+ * with UTC `start_time` of 2026-04-12T03:17:54Z disappears from a query
+ * ending on 2026-04-12. To recover these tz-crossing tags we widen the
+ * API window by one day on each side; bucketing still uses the tag's own
+ * `start_day` below, so tags from the padding days bucket under their
+ * own `start_day` keys and are simply never looked up by callers.
  */
 export async function fetchTagsByDay(
   client: OuraClient,
@@ -82,7 +93,10 @@ export async function fetchTagsByDay(
     Array.isArray(filter)
       ? new Set(filter.map((n) => n.toLowerCase()))
       : null;
-  const tags = await getEnhancedTags(client, { start_date: start, end_date: end });
+  const tags = await getEnhancedTags(client, {
+    start_date: addDays(start, -1),
+    end_date: addDays(end, 1),
+  });
   for (const t of tags) {
     const name = tagDisplayName(t);
     if (names && !names.has(name.toLowerCase())) continue;
