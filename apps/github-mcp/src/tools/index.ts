@@ -10,8 +10,9 @@ export function registerAllTools(
   server: McpServer,
   client: GitHubClient,
   defaultRepo: string | undefined,
+  defaultLabels: string[],
 ): void {
-  registerIssueTools(server, client, defaultRepo);
+  registerIssueTools(server, client, defaultRepo, defaultLabels);
   registerCommentTools(server, client, defaultRepo);
   registerLabelTools(server, client, defaultRepo);
   registerAssigneeTools(server, client, defaultRepo);
