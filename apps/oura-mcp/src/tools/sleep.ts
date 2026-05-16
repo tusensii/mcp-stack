@@ -99,7 +99,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
 
   server.tool(
     "oura_hrv_trend",
-    "Derived tool: fetches detailed sleep periods and returns a clean date-indexed HRV series. " +
+    "Derived tool: fetches detailed sleep periods and returns a clean date-indexed HRV series " +
+      "with exactly one row per date (longest sleep period per day; falls back to next-longest if the longest has null HRV). " +
       "Fields per entry: date, average_hrv (ms RMSSD), lowest_hrv (ms RMSSD), " +
       "average_heart_rate (bpm), lowest_heart_rate (bpm). " +
       "null values mean the ring did not record HRV that night. " +
@@ -114,20 +115,39 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       if (err) return errorContent(err);
       try {
         const periods = await getSleepPeriods(client, range);
-        const trend: HrvTrendEntry[] = periods
-          .filter((p) => p.type !== "deleted")
-          .map((p) => ({
-            date: p.day,
-            average_hrv: p.average_hrv,
-            lowest_hrv: p.hrv?.items
-              ? (() => {
-                  const nums = p.hrv.items.filter((v): v is number => v !== null);
-                  return nums.length > 0 ? nums.reduce((min, v) => (v < min ? v : min), nums[0]) : null;
-                })()
-              : null,
-            average_heart_rate: p.average_heart_rate,
-            lowest_heart_rate: p.lowest_heart_rate,
-          }));
+        // Group non-deleted periods by date, sort each group by total_sleep_duration desc,
+        // and pick the longest period that has a non-null average_hrv. If every period for
+        // the date has null HRV, keep the longest period anyway (so the date is still represented).
+        const byDate = new Map<string, typeof periods>();
+        for (const p of periods) {
+          if (p.type === "deleted") continue;
+          const list = byDate.get(p.day) ?? [];
+          list.push(p);
+          byDate.set(p.day, list);
+        }
+        const trend: HrvTrendEntry[] = [];
+        for (const [day, group] of byDate) {
+          const sorted = [...group].sort(
+            (a, b) => (b.total_sleep_duration ?? 0) - (a.total_sleep_duration ?? 0),
+          );
+          const chosen = sorted.find((p) => p.average_hrv !== null) ?? sorted[0];
+          if (!chosen) continue;
+          const hrvItems = chosen.hrv?.items;
+          const lowest_hrv = hrvItems
+            ? (() => {
+                const nums = hrvItems.filter((v): v is number => v !== null);
+                return nums.length > 0 ? nums.reduce((min, v) => (v < min ? v : min), nums[0]!) : null;
+              })()
+            : null;
+          trend.push({
+            date: day,
+            average_hrv: chosen.average_hrv,
+            lowest_hrv,
+            average_heart_rate: chosen.average_heart_rate,
+            lowest_heart_rate: chosen.lowest_heart_rate,
+          });
+        }
+        trend.sort((a, b) => a.date.localeCompare(b.date));
         return textContent(trend);
       } catch (e) {
         if (e instanceof OuraApiError) return errorContent(e.message);
