@@ -37,7 +37,8 @@ export function registerPeriodCompareTool(server: McpServer, client: OuraClient)
     "Side-by-side comparison of two arbitrary date ranges across one or more metrics. " +
       "Returns mean/median/stddev for each period plus delta_mean (b-a), delta_pct, " +
       "and a rough `meaningfully_different` flag (|delta| > 1 stddev of period A — " +
-      "intentionally crude, treat as a heuristic rather than statistical inference).",
+      "intentionally crude, treat as a heuristic rather than statistical inference). " +
+      "Dates: period_a/period_b ranges are matched against each metric's native date convention — sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, respiratory_rate, sleep_total) use the sleep-period-start date; daily-report metrics (readiness, sleep_score, activity_score, spo2) use the morning-of-report date.",
     {
       metrics: z
         .array(z.enum(METRIC_NAMES))

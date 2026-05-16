@@ -10,7 +10,8 @@ export function registerStressTools(server: McpServer, client: OuraClient): void
     "oura_daily_stress",
     "Returns daily stress metrics: stress_high (seconds in high-stress state), " +
       "recovery_high (seconds in high-recovery state), and day_summary label " +
-      "(restored/normal/stressful/unknown). Both time fields are in SECONDS.",
+      "(restored/normal/stressful/unknown). Both time fields are in SECONDS. " +
+      "Dates: \"day\" is the calendar day the stress measurements were taken on.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

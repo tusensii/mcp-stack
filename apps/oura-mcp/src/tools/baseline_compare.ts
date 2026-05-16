@@ -27,7 +27,8 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
       "backward up to 7 days for the most recent reading and returns it (with " +
       "`actual_date_used` and `days_lag` in the response). The baseline window itself " +
       "remains anchored to the requested date. Default `fallback: \"strict\"` preserves " +
-      "the no-data error behavior.",
+      "the no-data error behavior. " +
+      "Dates: \"date\" indexes the underlying metric — for sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, sleep_total, respiratory_rate) this is the date the sleep period started; for daily-report metrics (readiness, sleep_score, activity_score, spo2) this is the morning the score is reported on. The two conventions can refer to the same physiological night but different calendar dates.",
     {
       metric: z.enum(METRIC_NAMES).describe("Metric to compare against personal baseline."),
       date: z

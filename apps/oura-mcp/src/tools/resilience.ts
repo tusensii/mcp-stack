@@ -9,7 +9,8 @@ export function registerResilienceTools(server: McpServer, client: OuraClient): 
   server.tool(
     "oura_daily_resilience",
     "Returns daily resilience level (exceptional/strong/adequate/limited/poor) " +
-      "and contributor scores for sleep recovery, daytime recovery, and stress.",
+      "and contributor scores for sleep recovery, daytime recovery, and stress. " +
+      "Dates: \"day\" is the morning the resilience level is reported on (reflecting sleep ending that morning and the trailing recent period).",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

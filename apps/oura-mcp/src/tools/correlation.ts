@@ -70,7 +70,8 @@ export function registerCorrelationTool(server: McpServer, client: OuraClient): 
       "deep_sleep, rem_sleep, respiratory_rate, spo2, activity_score) or a tag (prefix " +
       "with `tag:`, matched against tag_type_code or custom_name). " +
       "Optional `lag_days` shifts B forward relative to A: tests whether A on day d " +
-      "predicts B on day d+lag.",
+      "predicts B on day d+lag. " +
+      "Dates: each series is keyed by its source's native date convention — sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, respiratory_rate, sleep_total) use the sleep-period-start date; daily-report metrics (readiness, sleep_score, activity_score, spo2) use the morning-of-report date; tag series use tag start_day. When correlating a sleep-derived metric with a daily-report metric at lag_days=0, pairs may be off by one calendar day from the same physiological night — consider lag_days=1 if the relationship looks weaker than expected.",
     {
       metric_a: z
         .string()

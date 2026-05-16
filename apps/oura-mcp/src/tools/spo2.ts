@@ -10,7 +10,8 @@ export function registerSpo2Tools(server: McpServer, client: OuraClient): void {
     "oura_daily_spo2",
     "Returns average blood oxygen saturation (SpO2) percentage per night. " +
       "spo2_percentage.average is a percentage value (e.g. 97.3). " +
-      "null means insufficient data for that night.",
+      "null means insufficient data for that night. " +
+      "Dates: \"day\" is the morning the nightly SpO2 average is reported on (reflecting the overnight sleep ending that morning).",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

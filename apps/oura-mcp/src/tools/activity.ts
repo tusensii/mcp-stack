@@ -10,7 +10,8 @@ export function registerActivityTools(server: McpServer, client: OuraClient): vo
     "oura_daily_activity",
     "Returns daily activity scores (0-100), step count, active calories, total calories, " +
       "MET minutes by intensity, and time breakdowns. " +
-      "All time fields (high_activity_time, sedentary_time, etc.) are in SECONDS.",
+      "All time fields (high_activity_time, sedentary_time, etc.) are in SECONDS. " +
+      "Dates: \"day\" is the calendar day the activity occurred.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),

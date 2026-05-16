@@ -45,7 +45,8 @@ export function registerInterventionAnalysisTool(
       "`meaningfully_different` flag is rough: |delta| > 1 stddev of the BEFORE period. " +
       "Specify the intervention either by explicit `intervention_date` OR by `tag_name` " +
       "(uses the FIRST occurrence of that user tag, exact-match case-insensitive, as the date). " +
-      "Provide exactly one.",
+      "Provide exactly one. " +
+      "Dates: intervention_date and the before/after windows are matched against each metric's native date convention — sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, respiratory_rate, sleep_total) use the sleep-period-start date; daily-report metrics (readiness, sleep_score, activity_score, spo2) use the morning-of-report date. If precise alignment to the intervention day matters, prefer the daily-report convention.",
     {
       intervention_date: z
         .string()

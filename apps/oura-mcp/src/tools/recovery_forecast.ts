@@ -23,7 +23,8 @@ export function registerRecoveryForecastTool(server: McpServer, client: OuraClie
     "Forecasts a single day's readiness score using recent trend plus regression " +
       "toward a 30-day mean. Returns predicted_readiness with a confidence band " +
       "(±1 stddev of recent values, clamped 0-100), trend label, and basis string. " +
-      "Defaults to predicting tomorrow.",
+      "Defaults to predicting tomorrow. " +
+      "Dates: \"target_date\" is the morning the predicted readiness score would be reported on (same convention as oura_daily_readiness — the morning following the overnight sleep being predicted).",
     {
       target_date: z
         .string()

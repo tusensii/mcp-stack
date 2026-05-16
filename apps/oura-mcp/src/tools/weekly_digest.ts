@@ -59,7 +59,8 @@ export function registerWeeklyDigestTool(server: McpServer, client: OuraClient):
     "Composite weekly summary across sleep, readiness, HRV, activity, anomalies, " +
       "and tags. Returns area-by-area numbers plus highlights (positive things) " +
       "and watch_outs (concerns). Default window is the 7 days ending the most " +
-      "recent Sunday in the user's TZ. Plain factual summary; agent layers narrative.",
+      "recent Sunday in the user's TZ. Plain factual summary; agent layers narrative. " +
+      "Dates: week_start/week_ending bracket a calendar window, but the metrics inside mix conventions — sleep-period-derived stats (HRV, RHR, deep/REM sleep, total sleep) bucket by sleep-period-start date, while readiness/sleep score/activity score bucket by morning-of-report date. Tag bucketing uses tag start_day. Differences are usually within ±1 day for any given night.",
     {
       week_ending: z
         .string()

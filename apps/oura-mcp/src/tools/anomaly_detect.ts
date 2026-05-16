@@ -212,7 +212,8 @@ export function registerAnomalyDetectTool(server: McpServer, client: OuraClient)
     "Flags days where a metric deviates from its rolling baseline by more than " +
       "z_threshold standard deviations. Scans each day in date_range against the " +
       "preceding baseline_window_days for each metric. Skips metrics with fewer than " +
-      "7 valid baseline samples. Use this to surface unusual readings worth investigating.",
+      "7 valid baseline samples. Use this to surface unusual readings worth investigating. " +
+      "Dates: each anomaly's \"date\" follows the source metric's convention — sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, respiratory_rate) use the sleep-period-start date, while readiness/sleep_score/activity_score use the morning-of-report date. Within a single result, anomalies for the same night may appear under different dates depending on the metric.",
     {
       date_range: z.object({ start: z.string(), end: z.string() }),
       baseline_window_days: z

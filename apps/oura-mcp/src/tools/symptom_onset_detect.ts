@@ -61,7 +61,8 @@ export function registerSymptomOnsetDetectTool(server: McpServer, client: OuraCl
       "Returns an array of { date, signals, z_scores, confidence } where " +
       "confidence = signals_count / 4. Returns an empty array when no onset days detected. " +
       "Requires at least 7 valid baseline samples per metric; days lacking sufficient " +
-      "baseline data report null z-scores and contribute no signals.",
+      "baseline data report null z-scores and contribute no signals. " +
+      "Dates: each onset \"date\" indexes a mix of conventions — body temperature deviation uses the morning-of-report date (from daily_readiness), while respiratory rate, RHR, and HRV use the sleep-period-start date (from /sleep). For a given physiological night the same date string may refer to slightly different calendar days across signals; treat the flagged date as the night being scrutinized rather than a precise event timestamp.",
     {
       start_date: z
         .string()
