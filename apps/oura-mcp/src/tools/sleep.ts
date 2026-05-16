@@ -134,7 +134,7 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
         // the date has null HRV, keep the longest period anyway (so the date is still represented).
         const byDate = new Map<string, typeof periods>();
         for (const p of periods) {
-          if (p.type === "deleted") continue;
+          if (p.type !== "sleep" && p.type !== "long_sleep") continue;
           const list = byDate.get(p.day) ?? [];
           list.push(p);
           byDate.set(p.day, list);

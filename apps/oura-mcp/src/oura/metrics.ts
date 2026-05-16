@@ -234,7 +234,7 @@ export async function fetchMetricByDay(
       };
       const byDay = new Map<string, SleepPeriod[]>();
       for (const p of periods) {
-        if (p.type === "deleted") continue;
+        if (p.type !== "sleep" && p.type !== "long_sleep") continue;
         const list = byDay.get(p.day) ?? [];
         list.push(p);
         byDay.set(p.day, list);
