@@ -26,7 +26,7 @@ interface RespiratoryTrendEntry {
  * average_breath, fall back to the next-longest. Skips deleted periods.
  */
 function pickPeriodForRespiratory(periods: SleepPeriod[]): SleepPeriod | undefined {
-  const usable = periods.filter((p) => p.type !== "deleted");
+  const usable = periods.filter((p) => p.type === "sleep" || p.type === "long_sleep");
   if (usable.length === 0) return undefined;
   // Sort by total_sleep_duration descending (nulls treated as -1).
   const sorted = [...usable].sort(

@@ -36,7 +36,7 @@ interface ReadinessWithRawValues extends DailyReadiness {
 function mainSleepPerDay(periods: SleepPeriod[]): Map<string, SleepPeriod> {
   const byDay = new Map<string, SleepPeriod>();
   for (const p of periods) {
-    if (p.type === "deleted") continue;
+    if (p.type !== "sleep" && p.type !== "long_sleep") continue;
     const existing = byDay.get(p.day);
     const existingDur = existing?.total_sleep_duration ?? -1;
     const candidateDur = p.total_sleep_duration ?? -1;
