@@ -130,22 +130,6 @@ export function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/**
- * Pick the longest-duration sleep period per day, ignoring deleted entries.
- * Returns Map<day, SleepPeriod>.
- */
-function mainSleepPerDay(periods: SleepPeriod[]): Map<string, SleepPeriod> {
-  const byDay = new Map<string, SleepPeriod>();
-  for (const p of periods) {
-    if (p.type === "deleted") continue;
-    const existing = byDay.get(p.day);
-    const existingDur = existing?.total_sleep_duration ?? -1;
-    const candidateDur = p.total_sleep_duration ?? -1;
-    if (!existing || candidateDur > existingDur) byDay.set(p.day, p);
-  }
-  return byDay;
-}
-
 /** Build a Map of YYYY-MM-DD → value for every day in [start, end]. */
 function buildSeries(
   start: string,
@@ -200,32 +184,55 @@ export async function fetchMetricByDay(
     case "deep_sleep":
     case "rem_sleep":
     case "respiratory_rate": {
-      const periods = await getSleepPeriods(client, range);
-      const main = mainSleepPerDay(periods);
-      const source = new Map<string, number | null>();
-      for (const [day, p] of main) {
-        let v: number | null;
+      // Oura's /sleep endpoint filters by `bedtime_start` (or similar), not
+      // by the `day` field we key on. A sleep period with `day = D` can have
+      // `bedtime_start` on D-1 (evening) and so be excluded from a tight
+      // `start=end=D` query. Pad the API window by one day on each side so
+      // single-day callers like baseline_compare see the same periods that
+      // wider-window callers (hrv_trend, daily_readiness) see. We then
+      // restrict the returned series back to [start, end] via buildSeries.
+      const paddedRange = {
+        start_date: addDays(start, -1),
+        end_date: addDays(end, 1),
+      };
+      const periods = await getSleepPeriods(client, paddedRange);
+
+      // Group periods by p.day and, for the requested metric, pick the
+      // longest-duration period whose value for that metric is non-null
+      // (falling back to the longest period overall if every value is
+      // null). Mirrors oura_hrv_trend's PR #10 dedup logic so cross-tool
+      // results agree on dates with multiple sleep periods (main + nap).
+      const valueFor = (p: SleepPeriod): number | null => {
         switch (metric) {
           case "hrv":
-            v = p.average_hrv;
-            break;
+            return p.average_hrv;
           case "rhr":
-            v = p.lowest_heart_rate;
-            break;
+            return p.lowest_heart_rate;
           case "sleep_total":
-            v = p.total_sleep_duration;
-            break;
+            return p.total_sleep_duration;
           case "deep_sleep":
-            v = p.deep_sleep_duration;
-            break;
+            return p.deep_sleep_duration;
           case "rem_sleep":
-            v = p.rem_sleep_duration;
-            break;
+            return p.rem_sleep_duration;
           case "respiratory_rate":
-            v = p.average_breath;
-            break;
+            return p.average_breath;
         }
-        source.set(day, v);
+      };
+      const byDay = new Map<string, SleepPeriod[]>();
+      for (const p of periods) {
+        if (p.type === "deleted") continue;
+        const list = byDay.get(p.day) ?? [];
+        list.push(p);
+        byDay.set(p.day, list);
+      }
+      const source = new Map<string, number | null>();
+      for (const [day, group] of byDay) {
+        const sorted = [...group].sort(
+          (a, b) => (b.total_sleep_duration ?? 0) - (a.total_sleep_duration ?? 0),
+        );
+        const chosen = sorted.find((p) => valueFor(p) !== null) ?? sorted[0];
+        if (!chosen) continue;
+        source.set(day, valueFor(chosen));
       }
       return buildSeries(start, end, source);
     }
