@@ -14,6 +14,7 @@ import {
   errorContent,
 } from "./utils.js";
 import type { HrvTrendEntry } from "../oura/types.js";
+import { fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 
 const dateRangeSchema = {
   start_date: z
@@ -104,12 +105,21 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       "Fields per entry: date, average_hrv (ms RMSSD), lowest_hrv (ms RMSSD), " +
       "average_heart_rate (bpm), lowest_heart_rate (bpm). " +
       "null values mean the ring did not record HRV that night. " +
-      "This is the best tool for HRV trends and cardiovascular recovery analysis.",
+      "This is the best tool for HRV trends and cardiovascular recovery analysis. " +
+      "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
+      "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (case-insensitive). " +
+      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
+      overlay_tags: z
+        .union([z.boolean(), z.array(z.string()).min(1)])
+        .optional()
+        .describe(
+          "Attach user tags to each row. `true` = all tags; string[] = filter by tag name (case-insensitive exact match). Omit/false = no tags.",
+        ),
     },
-    async ({ start_date, end_date }) => {
+    async ({ start_date, end_date, overlay_tags }) => {
       const range = resolveDateRange(start_date, end_date);
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
@@ -148,6 +158,19 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
           });
         }
         trend.sort((a, b) => a.date.localeCompare(b.date));
+        if (overlay_tags) {
+          const tagsByDay = await fetchTagsByDay(
+            client,
+            range.start_date,
+            range.end_date,
+            overlay_tags,
+          );
+          const withTags = trend.map((e) => ({
+            ...e,
+            tags: (tagsByDay.get(e.date) ?? []) as TagEntry[],
+          }));
+          return textContent(withTags);
+        }
         return textContent(trend);
       } catch (e) {
         if (e instanceof OuraApiError) return errorContent(e.message);

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getSleepPeriods } from "../oura/endpoints.js";
+import { fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 import type { SleepPeriod } from "../oura/types.js";
 import {
   textContent,
@@ -46,15 +47,24 @@ export function registerRespiratoryTrendTool(server: McpServer, client: OuraClie
       "average_respiratory_rate (breaths/min), and (when available) breath_samples_count, " +
       "respiratory_rate_min, respiratory_rate_max from the per-night breath time series. " +
       "null average_respiratory_rate means the ring did not record breath rate that night. " +
-      "Use this tool for respiratory-rate trends and elevated-breathing-rate analysis.",
+      "Use this tool for respiratory-rate trends and elevated-breathing-rate analysis. " +
+      "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
+      "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (case-insensitive). " +
+      "When set, each entry gets a `tags` array of {name, comment?, timestamp?}.",
     {
       start_date: z
         .string()
         .optional()
         .describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
+      overlay_tags: z
+        .union([z.boolean(), z.array(z.string()).min(1)])
+        .optional()
+        .describe(
+          "Attach user tags to each row. `true` = all tags; string[] = filter by tag name (case-insensitive exact match). Omit/false = no tags.",
+        ),
     },
-    async ({ start_date, end_date }) => {
+    async ({ start_date, end_date, overlay_tags }) => {
       const range = resolveDateRange(start_date, end_date);
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
@@ -88,6 +98,20 @@ export function registerRespiratoryTrendTool(server: McpServer, client: OuraClie
 
         // Sort by date ascending for consumer convenience.
         trend.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+        if (overlay_tags) {
+          const tagsByDay = await fetchTagsByDay(
+            client,
+            range.start_date,
+            range.end_date,
+            overlay_tags,
+          );
+          const withTags = trend.map((e) => ({
+            ...e,
+            tags: (tagsByDay.get(e.date) ?? []) as TagEntry[],
+          }));
+          return textContent(withTags);
+        }
 
         return textContent(trend);
       } catch (e) {
