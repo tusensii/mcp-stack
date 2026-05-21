@@ -29,8 +29,11 @@ for one-shot "open an issue" workflows.
 |---|---|
 | `github_add_labels` | Additive — keeps existing labels. |
 | `github_set_labels` | Replaces the full label set. |
-| `github_remove_label` | Remove a single label. |
+| `github_remove_label` | Remove a single label from one issue. |
 | `github_list_repo_labels` | List labels defined on a repo. |
+| `github_create_label` | Create a repo-level label (name + hex color, optional description). |
+| `github_update_label` | Rename / recolor / re-describe an existing repo label. |
+| `github_delete_label` | Delete a repo label. Cascades: also removes it from every issue using it. |
 
 ### Assignees
 | Tool | What it does |
