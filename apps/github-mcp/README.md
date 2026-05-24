@@ -62,7 +62,13 @@ pnpm wrangler secret put MCP_PATH_SECRET
 # Optional but recommended: default repo for tools called without 'repo' arg
 pnpm wrangler secret put GITHUB_DEFAULT_REPO   # e.g. tusensii/mcp-stack
 
-pnpm deploy
+# Strongly recommended when the PAT can reach more repos than this Worker
+# should touch: comma-separated owner/repo allowlist. GITHUB_DEFAULT_REPO
+# is implicitly included. Tool calls targeting any other repo are rejected
+# before hitting the GitHub API.
+pnpm wrangler secret put GITHUB_ALLOWED_REPOS  # e.g. tusensii/mcp-stack,tusensii/mcp-stack-private
+
+pnpm run deploy
 ```
 
 ## Connect from Claude.ai
@@ -89,9 +95,17 @@ to file an issue. Without an explicit `repo` arg it'll target
 
 ## Security notes
 
-The PAT is broad by design (Christopher's full account) so this MCP can
-review or act on any of his repos. The Worker is gated behind a
-URL-path secret, CORS-locked to `https://claude.ai`, and only ever
-holds the token in the Wrangler secret store. If the path secret leaks,
-rotate it via `pnpm wrangler secret put MCP_PATH_SECRET`; if the PAT
-leaks, revoke at https://github.com/settings/tokens and re-issue.
+The deploying user's PAT determines which repos this Worker can reach.
+A classic `repo`-scope PAT grants access to every repo the user owns or
+collaborates on, so prefer a fine-grained PAT scoped to just the repos
+this Worker needs. As a second line of defense, set `GITHUB_ALLOWED_REPOS`
+to an explicit allowlist — tool calls targeting any other repo are
+rejected at the Worker before the PAT is used. The Worker is also gated
+by a URL-path secret and only holds the token in the Wrangler secret
+store. The `corsOptions.origin = https://claude.ai` setting only affects
+browser preflights; non-browser clients are gated by the path secret, not
+by CORS.
+
+Rotation: if the path secret leaks, replace it via
+`pnpm wrangler secret put MCP_PATH_SECRET`. If the PAT leaks, revoke at
+https://github.com/settings/tokens and re-issue.

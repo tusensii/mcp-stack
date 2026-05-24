@@ -11,10 +11,11 @@ export function registerAllTools(
   client: GitHubClient,
   defaultRepo: string | undefined,
   defaultLabels: string[],
+  allowedRepos: Set<string> | undefined,
 ): void {
-  registerIssueTools(server, client, defaultRepo, defaultLabels);
-  registerCommentTools(server, client, defaultRepo);
-  registerLabelTools(server, client, defaultRepo);
-  registerAssigneeTools(server, client, defaultRepo);
+  registerIssueTools(server, client, defaultRepo, defaultLabels, allowedRepos);
+  registerCommentTools(server, client, defaultRepo, allowedRepos);
+  registerLabelTools(server, client, defaultRepo, allowedRepos);
+  registerAssigneeTools(server, client, defaultRepo, allowedRepos);
   registerSearchTools(server, client);
 }
