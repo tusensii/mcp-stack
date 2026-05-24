@@ -12,6 +12,7 @@ const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 export function resolveRepo(
   arg: string | undefined,
   defaultRepo: string | undefined,
+  allowedRepos?: Set<string>,
 ): { owner: string; repo: string } | { error: McpToolResponse } {
   const value = arg ?? defaultRepo;
   if (!value) {
@@ -23,6 +24,13 @@ export function resolveRepo(
   }
   if (!REPO_RE.test(value)) {
     return { error: errorContent(`Invalid repo '${value}'. Expected 'owner/name'.`) };
+  }
+  if (allowedRepos && !allowedRepos.has(value.toLowerCase())) {
+    return {
+      error: errorContent(
+        `Repo '${value}' is not in the GITHUB_ALLOWED_REPOS allowlist for this Worker.`,
+      ),
+    };
   }
   const [owner, repo] = value.split("/") as [string, string];
   return { owner, repo };

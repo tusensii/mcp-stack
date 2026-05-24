@@ -21,6 +21,7 @@ export function registerLabelTools(
   server: McpServer,
   client: GitHubClient,
   defaultRepo: string | undefined,
+  allowedRepos: Set<string> | undefined,
 ): void {
   server.tool(
     "github_add_labels",
@@ -31,7 +32,7 @@ export function registerLabelTools(
       labels: z.array(z.string().min(1)).min(1),
     },
     async ({ repo, issue_number, labels }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const result = await client.post<unknown>(
@@ -54,7 +55,7 @@ export function registerLabelTools(
       labels: z.array(z.string()).describe("Full replacement set."),
     },
     async ({ repo, issue_number, labels }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const result = await client.put<unknown>(
@@ -77,7 +78,7 @@ export function registerLabelTools(
       label: z.string().min(1),
     },
     async ({ repo, issue_number, label }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const result = await client.delete<unknown>(
@@ -100,7 +101,7 @@ export function registerLabelTools(
       description: z.string().max(100).optional(),
     },
     async ({ repo, name, color, description }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const body: Record<string, unknown> = { name, color: normalizeColor(color) };
@@ -124,7 +125,7 @@ export function registerLabelTools(
       description: z.string().max(100).optional(),
     },
     async ({ repo, name, new_name, color, description }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const body: Record<string, unknown> = {};
@@ -150,7 +151,7 @@ export function registerLabelTools(
       name: z.string().min(1).describe("Label name to delete."),
     },
     async ({ repo, name }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const result = await client.delete<unknown>(
@@ -172,7 +173,7 @@ export function registerLabelTools(
       page: z.number().int().min(1).optional(),
     },
     async ({ repo, ...params }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const labels = await client.get<unknown>(`/repos/${r.owner}/${r.repo}/labels`, params);

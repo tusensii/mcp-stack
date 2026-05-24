@@ -12,6 +12,7 @@ export function registerAssigneeTools(
   server: McpServer,
   client: GitHubClient,
   defaultRepo: string | undefined,
+  allowedRepos: Set<string> | undefined,
 ): void {
   server.tool(
     "github_add_assignees",
@@ -22,7 +23,7 @@ export function registerAssigneeTools(
       assignees: z.array(z.string().min(1)).min(1),
     },
     async ({ repo, issue_number, assignees }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const issue = await client.post<unknown>(
@@ -45,7 +46,7 @@ export function registerAssigneeTools(
       assignees: z.array(z.string().min(1)).min(1),
     },
     async ({ repo, issue_number, assignees }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const issue = await client.delete<unknown>(

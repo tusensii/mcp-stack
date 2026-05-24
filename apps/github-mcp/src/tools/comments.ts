@@ -12,6 +12,7 @@ export function registerCommentTools(
   server: McpServer,
   client: GitHubClient,
   defaultRepo: string | undefined,
+  allowedRepos: Set<string> | undefined,
 ): void {
   server.tool(
     "github_add_issue_comment",
@@ -22,7 +23,7 @@ export function registerCommentTools(
       body: z.string().min(1).describe("Markdown body."),
     },
     async ({ repo, issue_number, body }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const comment = await client.post<unknown>(
@@ -47,7 +48,7 @@ export function registerCommentTools(
       page: z.number().int().min(1).optional(),
     },
     async ({ repo, issue_number, ...params }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const comments = await client.get<unknown>(
@@ -70,7 +71,7 @@ export function registerCommentTools(
       body: z.string().min(1),
     },
     async ({ repo, comment_id, body }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const comment = await client.patch<unknown>(
@@ -92,7 +93,7 @@ export function registerCommentTools(
       comment_id: z.number().int().min(1),
     },
     async ({ repo, comment_id }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         await client.delete<void>(`/repos/${r.owner}/${r.repo}/issues/comments/${comment_id}`);

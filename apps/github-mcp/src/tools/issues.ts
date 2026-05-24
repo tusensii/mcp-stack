@@ -13,6 +13,7 @@ export function registerIssueTools(
   client: GitHubClient,
   defaultRepo: string | undefined,
   defaultLabels: string[],
+  allowedRepos: Set<string> | undefined,
 ): void {
   const createIssueLabelsDesc =
     defaultLabels.length > 0
@@ -31,7 +32,7 @@ export function registerIssueTools(
       milestone: z.number().int().optional().describe("Milestone number (not title)."),
     },
     async ({ repo, title, body, labels, assignees, milestone }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       const mergedLabels = Array.from(new Set([...defaultLabels, ...(labels ?? [])]));
       try {
@@ -57,7 +58,7 @@ export function registerIssueTools(
       issue_number: z.number().int().min(1),
     },
     async ({ repo, issue_number }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const issue = await client.get<unknown>(`/repos/${r.owner}/${r.repo}/issues/${issue_number}`);
@@ -87,7 +88,7 @@ export function registerIssueTools(
       page: z.number().int().min(1).optional(),
     },
     async ({ repo, ...params }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         const issues = await client.get<unknown>(`/repos/${r.owner}/${r.repo}/issues`, params);
@@ -114,7 +115,7 @@ export function registerIssueTools(
       milestone: z.number().int().nullable().optional().describe("Pass null to clear."),
     },
     async ({ repo, issue_number, ...patch }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       const body: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(patch)) {
@@ -144,7 +145,7 @@ export function registerIssueTools(
       lock_reason: z.enum(["off-topic", "too heated", "resolved", "spam"]).optional(),
     },
     async ({ repo, issue_number, lock_reason }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         await client.put<void>(
@@ -166,7 +167,7 @@ export function registerIssueTools(
       issue_number: z.number().int().min(1),
     },
     async ({ repo, issue_number }) => {
-      const r = resolveRepo(repo, defaultRepo);
+      const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
         await client.delete<void>(`/repos/${r.owner}/${r.repo}/issues/${issue_number}/lock`);
