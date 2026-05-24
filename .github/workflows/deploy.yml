@@ -1,0 +1,132 @@
+name: deploy
+
+# Auto-deploy Workers when main changes.
+#
+# Strategy: detect which apps were touched (directly or via a shared-package
+# change), run the test gate once, then deploy each affected app in parallel.
+#
+# Required repo secrets:
+#   CLOUDFLARE_API_TOKEN  — token with "Edit Cloudflare Workers" template
+#   CLOUDFLARE_ACCOUNT_ID — Cloudflare account ID
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      oura: ${{ steps.compute.outputs.oura }}
+      gmail: ${{ steps.compute.outputs.gmail }}
+      trip: ${{ steps.compute.outputs.trip }}
+      github: ${{ steps.compute.outputs.github }}
+      any: ${{ steps.compute.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'tsconfig.base.json'
+            oura:
+              - 'apps/oura-mcp/**'
+            gmail:
+              - 'apps/gmail-mcp/**'
+            trip:
+              - 'apps/trip-mcp/**'
+            github:
+              - 'apps/github-mcp/**'
+      - id: compute
+        env:
+          SHARED: ${{ steps.filter.outputs.shared }}
+          OURA: ${{ steps.filter.outputs.oura }}
+          GMAIL: ${{ steps.filter.outputs.gmail }}
+          TRIP: ${{ steps.filter.outputs.trip }}
+          GITHUB_APP: ${{ steps.filter.outputs.github }}
+        run: |
+          oura=$([[ "$OURA" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
+          gmail=$([[ "$GMAIL" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
+          trip=$([[ "$TRIP" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
+          github=$([[ "$GITHUB_APP" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
+          any=$([[ "$oura" == "true" || "$gmail" == "true" || "$trip" == "true" || "$github" == "true" ]] && echo true || echo false)
+          echo "oura=$oura"     >> "$GITHUB_OUTPUT"
+          echo "gmail=$gmail"   >> "$GITHUB_OUTPUT"
+          echo "trip=$trip"     >> "$GITHUB_OUTPUT"
+          echo "github=$github" >> "$GITHUB_OUTPUT"
+          echo "any=$any"       >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm test
+
+  deploy:
+    needs: [changes, test]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: oura-mcp
+            flag: oura
+          - app: gmail-mcp
+            flag: gmail
+          - app: trip-mcp
+            flag: trip
+          - app: github-mcp
+            flag: github
+    steps:
+      - name: Skip if app unchanged
+        id: gate
+        env:
+          OURA: ${{ needs.changes.outputs.oura }}
+          GMAIL: ${{ needs.changes.outputs.gmail }}
+          TRIP: ${{ needs.changes.outputs.trip }}
+          GITHUB_APP: ${{ needs.changes.outputs.github }}
+          FLAG: ${{ matrix.flag }}
+        run: |
+          case "$FLAG" in
+            oura)   should="$OURA" ;;
+            gmail)  should="$GMAIL" ;;
+            trip)   should="$TRIP" ;;
+            github) should="$GITHUB_APP" ;;
+          esac
+          echo "should=$should" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${{ matrix.app }}? $should"
+      - if: steps.gate.outputs.should == 'true'
+        uses: actions/checkout@v4
+      - if: steps.gate.outputs.should == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.gate.outputs.should == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - if: steps.gate.outputs.should == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.gate.outputs.should == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/${{ matrix.app }}
+          command: deploy

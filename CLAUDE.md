@@ -94,9 +94,20 @@ file follow-up issues; don't pile changes into one branch.
   and are out of scope for this repo. Don't reference them in public code or
   issues.
 
-## Wrangler operations Claude Code may run autonomously
+## Deployment
 
-- `pnpm wrangler deploy` — from an app dir.
+The default path is **CI auto-deploys on push to `main`**
+(`.github/workflows/deploy.yml`). Each Worker app deploys only when its own
+files changed or a shared `packages/**` / lockfile change touched it. The
+test gate (`pnpm type-check` + `pnpm test`) must pass first.
+
+Manual `pnpm wrangler deploy` from an app dir is still available — use it
+for out-of-band fixes, deploying from a branch, or smoke-testing before
+merge. Routine PR-merge deploys should not require Claude Code to run it.
+
+### Wrangler operations Claude Code may run autonomously
+
+- `pnpm wrangler deploy` — from an app dir (manual / out-of-band only).
 - `pnpm wrangler tail` — for live log streaming during smoke tests.
 - `pnpm wrangler secret list` — names only; safe.
 - `pnpm wrangler whoami`.
