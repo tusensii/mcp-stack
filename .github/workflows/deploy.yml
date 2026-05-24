@@ -13,6 +13,19 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      app:
+        description: "Which app to deploy. 'none' is a dry-run that exercises the test gate without deploying."
+        type: choice
+        required: true
+        default: none
+        options:
+          - none
+          - all
+          - oura-mcp
+          - gmail-mcp
+          - trip-mcp
+          - github-mcp
 
 permissions:
   contents: read
@@ -47,16 +60,33 @@ jobs:
               - 'apps/github-mcp/**'
       - id: compute
         env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_APP: ${{ inputs.app }}
           SHARED: ${{ steps.filter.outputs.shared }}
           OURA: ${{ steps.filter.outputs.oura }}
           GMAIL: ${{ steps.filter.outputs.gmail }}
           TRIP: ${{ steps.filter.outputs.trip }}
           GITHUB_APP: ${{ steps.filter.outputs.github }}
         run: |
-          oura=$([[ "$OURA" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
-          gmail=$([[ "$GMAIL" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
-          trip=$([[ "$TRIP" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
-          github=$([[ "$GITHUB_APP" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
+          # workflow_dispatch path: honor the explicit app input.
+          # paths-filter has no base to diff against on dispatch, so we
+          # ignore its output and use the dropdown instead.
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "$DISPATCH_APP" in
+              none)       oura=false; gmail=false; trip=false; github=false ;;
+              all)        oura=true;  gmail=true;  trip=true;  github=true ;;
+              oura-mcp)   oura=true;  gmail=false; trip=false; github=false ;;
+              gmail-mcp)  oura=false; gmail=true;  trip=false; github=false ;;
+              trip-mcp)   oura=false; gmail=false; trip=true;  github=false ;;
+              github-mcp) oura=false; gmail=false; trip=false; github=true ;;
+              *)          oura=false; gmail=false; trip=false; github=false ;;
+            esac
+          else
+            oura=$([[ "$OURA" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
+            gmail=$([[ "$GMAIL" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
+            trip=$([[ "$TRIP" == "true"  || "$SHARED" == "true" ]] && echo true || echo false)
+            github=$([[ "$GITHUB_APP" == "true" || "$SHARED" == "true" ]] && echo true || echo false)
+          fi
           any=$([[ "$oura" == "true" || "$gmail" == "true" || "$trip" == "true" || "$github" == "true" ]] && echo true || echo false)
           echo "oura=$oura"     >> "$GITHUB_OUTPUT"
           echo "gmail=$gmail"   >> "$GITHUB_OUTPUT"
@@ -66,7 +96,9 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.any == 'true'
+    # Always run on workflow_dispatch so the dry-run ('app: none') still
+    # exercises the test gate; otherwise skip when nothing needs deploying.
+    if: needs.changes.outputs.any == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
