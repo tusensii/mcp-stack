@@ -8,7 +8,10 @@ import { resolveDateRange, validateDateRange, textContent, errorContent } from "
 export function registerSessionTools(server: McpServer, client: OuraClient): void {
   server.tool(
     "oura_sessions",
-    "Returns mindfulness and rest sessions: meditation, breathing, nap, relaxation, rest. " +
+    "Returns ONLY user-initiated sessions logged manually in the Oura app " +
+      "(meditation, breathing, relaxation, rest, and user-logged naps). " +
+      "Does NOT include auto-detected naps from the sleep stream — for those, " +
+      "use `oura_naps` (or `oura_sleep_detail` and filter where type is 'nap' or 'late_nap'). " +
       "Includes type, start/end datetime, mood rating, and HRV/HR sample arrays. " +
       "Dates: \"day\" is the calendar day the session occurred (derived from start_datetime).",
     {
