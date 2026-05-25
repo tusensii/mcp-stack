@@ -10,7 +10,7 @@ export function buildServer(env: Env): McpServer {
   });
 
   const gmail = buildGmailClient(env);
-  registerAllTools(server, gmail);
+  registerAllTools(server, gmail, env);
 
   return server;
 }
