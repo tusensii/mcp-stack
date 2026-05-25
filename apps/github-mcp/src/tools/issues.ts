@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
 import { resolveRepo, handleError, textContent, errorContent } from "./utils.js";
+import { preflightLabels } from "./labels.js";
 
 const repoArg = z
   .string()
@@ -22,7 +23,11 @@ export function registerIssueTools(
 
   server.tool(
     "github_create_issue",
-    "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional.",
+    "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional. " +
+      "By default, fails with a structured error if any requested label does not exist " +
+      "on the repo (GitHub itself silently drops unknown labels, which we treat as a bug). " +
+      "Pass create_missing_labels: true to auto-create unknown labels first, with a color " +
+      "heuristic (app:* → purple, area:* → green, other prefix → yellow, no prefix → grey).",
     {
       repo: repoArg,
       title: z.string().min(1).describe("Issue title."),
@@ -30,12 +35,26 @@ export function registerIssueTools(
       labels: z.array(z.string()).optional().describe(createIssueLabelsDesc),
       assignees: z.array(z.string()).optional().describe("GitHub usernames to assign."),
       milestone: z.number().int().optional().describe("Milestone number (not title)."),
+      create_missing_labels: z
+        .boolean()
+        .optional()
+        .describe("If true, auto-create any labels that don't exist on the repo. Default false."),
     },
-    async ({ repo, title, body, labels, assignees, milestone }) => {
+    async ({ repo, title, body, labels, assignees, milestone, create_missing_labels }) => {
       const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       const mergedLabels = Array.from(new Set([...defaultLabels, ...(labels ?? [])]));
       try {
+        if (mergedLabels.length > 0) {
+          const pf = await preflightLabels(
+            client,
+            r.owner,
+            r.repo,
+            mergedLabels,
+            create_missing_labels ?? false,
+          );
+          if ("error" in pf) return pf.error;
+        }
         const issue = await client.post<unknown>(`/repos/${r.owner}/${r.repo}/issues`, {
           title,
           ...(body !== undefined ? { body } : {}),
