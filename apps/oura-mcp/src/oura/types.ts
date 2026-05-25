@@ -106,7 +106,7 @@ export interface SleepPeriod {
   sleep_score_delta: number | null;
   time_in_bed: number | null; // seconds
   total_sleep_duration: number | null; // seconds
-  type: "deleted" | "sleep" | "long_sleep" | "late_nap" | "rest";
+  type: "deleted" | "sleep" | "long_sleep" | "nap" | "late_nap" | "rest";
   ring_id: string | null;
   app_sleep_phase_5_min: string | null;
 }
