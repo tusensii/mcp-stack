@@ -15,12 +15,47 @@ import { textContent, errorContent, formatGmailError } from "./utils.js";
  * migration sub-task.
  */
 
-type MimePart = {
+export type MimePart = {
   mimeType?: string | null;
-  body?: { data?: string | null } | null;
+  body?: { data?: string | null; attachmentId?: string | null; size?: number | null } | null;
   parts?: MimePart[] | null;
   filename?: string | null;
 };
+
+export type AttachmentMeta = {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+};
+
+/**
+ * Walk a Gmail MIME tree and collect metadata for every part that carries
+ * an attachment (i.e. has both a `filename` and a `body.attachmentId`).
+ * Recurses through nested multipart containers (mixed/alternative/related
+ * etc.) so attachments nested below a multipart/alternative body — a
+ * common real-world shape — aren't missed. Shares the depth guard used by
+ * `extractBody` to avoid pathological/cyclic trees.
+ */
+export function collectAttachments(part: MimePart, depth = 0): AttachmentMeta[] {
+  if (depth > 8) return [];
+
+  const results: AttachmentMeta[] = [];
+  if (part.filename && part.body?.attachmentId) {
+    results.push({
+      attachmentId: part.body.attachmentId,
+      filename: part.filename,
+      mimeType: part.mimeType ?? "application/octet-stream",
+      size: part.body.size ?? 0,
+    });
+  }
+
+  for (const child of part.parts ?? []) {
+    results.push(...collectAttachments(child, depth + 1));
+  }
+
+  return results;
+}
 
 /**
  * Walk a Gmail MIME tree and pull out a plain-text representation of the
