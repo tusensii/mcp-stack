@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
 import { resolveRepo, handleError, textContent, errorContent } from "./utils.js";
+import { ensureLabelsExist } from "./label-sync.js";
 
 const repoArg = z
   .string()
@@ -16,13 +17,19 @@ export function registerIssueTools(
   allowedRepos: Set<string> | undefined,
 ): void {
   const createIssueLabelsDesc =
-    defaultLabels.length > 0
-      ? `Label names to apply. Merged with deployment defaults [${defaultLabels.join(", ")}] (deduped).`
-      : "Label names to apply.";
+    (defaultLabels.length > 0
+      ? `Label names to apply. Merged with deployment defaults [${defaultLabels.join(", ")}] (deduped). `
+      : "Label names to apply. ") +
+    "Labels that don't yet exist on the repo are created automatically " +
+    "(color chosen by a naming heuristic: app:* → purple, other prefix:* labels → blue, " +
+    "everything else → grey); any names created this way are listed in the " +
+    "response under 'auto_created_labels'.";
 
   server.tool(
     "github_create_issue",
-    "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional.",
+    "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional. " +
+      "Unknown labels are auto-created rather than silently dropped — see the 'labels' " +
+      "parameter description.",
     {
       repo: repoArg,
       title: z.string().min(1).describe("Issue title."),
@@ -36,6 +43,10 @@ export function registerIssueTools(
       if ("error" in r) return r.error;
       const mergedLabels = Array.from(new Set([...defaultLabels, ...(labels ?? [])]));
       try {
+        const autoCreatedLabels =
+          mergedLabels.length > 0
+            ? await ensureLabelsExist(client, r.owner, r.repo, mergedLabels)
+            : [];
         const issue = await client.post<unknown>(`/repos/${r.owner}/${r.repo}/issues`, {
           title,
           ...(body !== undefined ? { body } : {}),
@@ -43,7 +54,11 @@ export function registerIssueTools(
           ...(assignees ? { assignees } : {}),
           ...(milestone !== undefined ? { milestone } : {}),
         });
-        return textContent(issue);
+        return textContent(
+          autoCreatedLabels.length > 0
+            ? { ...(issue as Record<string, unknown>), auto_created_labels: autoCreatedLabels }
+            : issue,
+        );
       } catch (e) {
         return handleError(e);
       }

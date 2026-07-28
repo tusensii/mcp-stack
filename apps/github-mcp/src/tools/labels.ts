@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
 import { resolveRepo, handleError, textContent } from "./utils.js";
+import { ensureLabelsExist } from "./label-sync.js";
 
 const repoArg = z
   .string()
@@ -25,7 +26,10 @@ export function registerLabelTools(
 ): void {
   server.tool(
     "github_add_labels",
-    "Add labels to an issue (additive; existing labels kept).",
+    "Add labels to an issue (additive; existing labels kept). Labels that don't yet exist " +
+      "on the repo are created automatically (color chosen by a naming heuristic: app:* → " +
+      "purple, other prefix:* labels → blue, unprefixed → grey); any names created this way " +
+      "are listed in the response under 'auto_created_labels'.",
     {
       repo: repoArg,
       issue_number: z.number().int().min(1),
@@ -35,11 +39,16 @@ export function registerLabelTools(
       const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
+        const autoCreatedLabels = await ensureLabelsExist(client, r.owner, r.repo, labels);
         const result = await client.post<unknown>(
           `/repos/${r.owner}/${r.repo}/issues/${issue_number}/labels`,
           { labels },
         );
-        return textContent(result);
+        return textContent(
+          autoCreatedLabels.length > 0
+            ? { labels: result, auto_created_labels: autoCreatedLabels }
+            : result,
+        );
       } catch (e) {
         return handleError(e);
       }
@@ -48,7 +57,10 @@ export function registerLabelTools(
 
   server.tool(
     "github_set_labels",
-    "Replace all labels on an issue with the provided set. Pass empty array to clear.",
+    "Replace all labels on an issue with the provided set. Pass empty array to clear. Labels " +
+      "that don't yet exist on the repo are created automatically (color chosen by a naming " +
+      "heuristic: app:* → purple, other prefix:* labels → blue, unprefixed → grey); any names created " +
+      "this way are listed in the response under 'auto_created_labels'.",
     {
       repo: repoArg,
       issue_number: z.number().int().min(1),
@@ -58,11 +70,16 @@ export function registerLabelTools(
       const r = resolveRepo(repo, defaultRepo, allowedRepos);
       if ("error" in r) return r.error;
       try {
+        const autoCreatedLabels = await ensureLabelsExist(client, r.owner, r.repo, labels);
         const result = await client.put<unknown>(
           `/repos/${r.owner}/${r.repo}/issues/${issue_number}/labels`,
           { labels },
         );
-        return textContent(result);
+        return textContent(
+          autoCreatedLabels.length > 0
+            ? { labels: result, auto_created_labels: autoCreatedLabels }
+            : result,
+        );
       } catch (e) {
         return handleError(e);
       }
