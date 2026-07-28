@@ -51,8 +51,11 @@ and the desired behavior; the fix is decided in the PR.
   documented behavior"; everything else is `enhancement`.
 - `app:<app-name>` — e.g. `app:oura-mcp`. Useful once cross-app issues land.
 
-Labels must exist on the repo before `github_create_issue` can apply them.
-Create them once via the GitHub UI; after that the MCP can use them freely.
+Labels don't need to pre-exist: `github_create_issue`, `github_add_labels`,
+and `github_set_labels` auto-create any label name that isn't already on the
+repo (color chosen by a naming heuristic — `app:*` purple, other
+`prefix:*` labels blue, unprefixed grey) and report the created names back
+in `auto_created_labels`.
 
 ### Assignees
 
