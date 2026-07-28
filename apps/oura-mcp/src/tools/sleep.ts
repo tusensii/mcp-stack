@@ -81,6 +81,30 @@ export function filterPeriodsByDay(
   return periods.filter((p) => p.day >= start_date && p.day <= end_date);
 }
 
+/** Allowed values for oura_sleep_detail's `type` filter (#48). */
+export const SLEEP_PERIOD_TYPES = [
+  "sleep",
+  "long_sleep",
+  "nap",
+  "late_nap",
+  "rest",
+  "deleted",
+] as const;
+
+/**
+ * Filters sleep periods down to the requested `type`(s). Omitted/undefined
+ * or empty array means "no filter" (all types returned) — default behavior
+ * is unchanged per #48's acceptance criteria.
+ */
+export function filterPeriodsByType(
+  periods: SleepPeriod[],
+  types: readonly string[] | undefined,
+): SleepPeriod[] {
+  if (!types || types.length === 0) return periods;
+  const wanted = new Set(types);
+  return periods.filter((p) => wanted.has(p.type));
+}
+
 export function registerSleepTools(server: McpServer, client: OuraClient): void {
   server.tool(
     "oura_daily_sleep",
@@ -121,7 +145,9 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       "and post-filters by `day` so `start_date == end_date == X` reliably returns all records with `day: X`. " +
       "By default, the response strips time-series fields (heart_rate, hrv, sleep_phase_30_sec, " +
       "sleep_phase_5_min, app_sleep_phase_5_min, movement_30_sec) to keep payloads small; " +
-      "set `include_time_series: true` to get the raw payload including those fields.",
+      "set `include_time_series: true` to get the raw payload including those fields. " +
+      "Pass `type` to restrict which period types are returned (e.g. `[\"long_sleep\"]` for real " +
+      "nights only, or `[\"nap\", \"late_nap\"]` for naps only); omit for all types (default, unchanged).",
     {
       ...dateRangeSchema,
       include_time_series: z
@@ -130,8 +156,15 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
         .describe(
           "If true, return the raw payload including time-series fields (heart_rate.items, hrv.items, sleep_phase_30_sec, sleep_phase_5_min, app_sleep_phase_5_min, movement_30_sec). Default false (stripped).",
         ),
+      type: z
+        .array(z.enum(SLEEP_PERIOD_TYPES))
+        .min(1)
+        .optional()
+        .describe(
+          "Restrict results to these period types (\"sleep\", \"long_sleep\", \"nap\", \"late_nap\", \"rest\", \"deleted\"). Omit for all types (default).",
+        ),
     },
-    async ({ start_date, end_date, max_pages, include_time_series }) => {
+    async ({ start_date, end_date, max_pages, include_time_series, type }) => {
       const range = resolveDateRange(start_date, end_date);
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
@@ -143,7 +176,8 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       };
       try {
         const raw = await getSleepPeriods(client, widened, max_pages);
-        const filtered = filterPeriodsByDay(raw, range.start_date, range.end_date);
+        const byDay = filterPeriodsByDay(raw, range.start_date, range.end_date);
+        const filtered = filterPeriodsByType(byDay, type);
         const out = include_time_series ? filtered : filtered.map(stripTimeSeries);
         return textContent(out);
       } catch (e) {

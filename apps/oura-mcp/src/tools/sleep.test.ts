@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   filterPeriodsByDay,
+  filterPeriodsByType,
   shiftDate,
   stripTimeSeries,
 } from "./sleep.js";
@@ -143,6 +144,41 @@ describe("stripTimeSeries", () => {
     const passthrough = { ...p };
     expect(passthrough.heart_rate).not.toBeNull();
     expect(passthrough.sleep_phase_30_sec).toBe("1234");
+  });
+});
+
+describe("filterPeriodsByType (issue #48)", () => {
+  const periods = [
+    makePeriod({ id: "night", type: "long_sleep" }),
+    makePeriod({ id: "nap", type: "nap" }),
+    makePeriod({ id: "late", type: "late_nap" }),
+    makePeriod({ id: "rest", type: "rest" }),
+    makePeriod({ id: "short", type: "sleep" }),
+    makePeriod({ id: "gone", type: "deleted" }),
+  ];
+
+  it("returns all periods unchanged when type is omitted (default unchanged)", () => {
+    expect(filterPeriodsByType(periods, undefined)).toEqual(periods);
+  });
+
+  it("returns all periods unchanged when type is an empty array", () => {
+    expect(filterPeriodsByType(periods, [])).toEqual(periods);
+  });
+
+  it("filters to a single requested type", () => {
+    const out = filterPeriodsByType(periods, ["long_sleep"]);
+    expect(out.map((p) => p.id)).toEqual(["night"]);
+  });
+
+  it("filters to multiple requested types (naps only)", () => {
+    const out = filterPeriodsByType(periods, ["nap", "late_nap"]);
+    expect(out.map((p) => p.id).sort()).toEqual(["late", "nap"]);
+  });
+
+  it("returns empty when no period matches the requested type", () => {
+    // No "deleted"-typed... wait we do have one; use a type with zero matches instead.
+    const noneOfThisType = periods.filter((p) => p.type !== "rest");
+    expect(filterPeriodsByType(noneOfThisType, ["rest"])).toEqual([]);
   });
 });
 

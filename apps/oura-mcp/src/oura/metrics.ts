@@ -110,6 +110,104 @@ export async function fetchTagsByDay(
   return out;
 }
 
+/**
+ * Metrics sourced from `/sleep` (as opposed to a daily-report endpoint).
+ * Used by baseline_compare (#46) to decide when it needs to resolve and
+ * expose the underlying SleepPeriod (bedtime_start/bedtime_end) alongside
+ * the scalar value, since these metrics are vulnerable to the sync-boundary
+ * "wrong night" confusion documented in that issue.
+ */
+export const SLEEP_DERIVED_METRICS: ReadonlySet<Metric> = new Set([
+  "hrv",
+  "rhr",
+  "sleep_total",
+  "deep_sleep",
+  "rem_sleep",
+  "respiratory_rate",
+]);
+
+export function isSleepDerivedMetric(metric: Metric): metric is
+  | "hrv"
+  | "rhr"
+  | "sleep_total"
+  | "deep_sleep"
+  | "rem_sleep"
+  | "respiratory_rate" {
+  return SLEEP_DERIVED_METRICS.has(metric);
+}
+
+/** Extracts the scalar value a sleep-derived metric reads off a SleepPeriod. */
+export function sleepMetricValue(metric: Metric, p: SleepPeriod): number | null {
+  switch (metric) {
+    case "hrv":
+      return p.average_hrv;
+    case "rhr":
+      return p.lowest_heart_rate;
+    case "sleep_total":
+      return p.total_sleep_duration;
+    case "deep_sleep":
+      return p.deep_sleep_duration;
+    case "rem_sleep":
+      return p.rem_sleep_duration;
+    case "respiratory_rate":
+      return p.average_breath;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Groups `sleep`/`long_sleep` periods by `p.day` and picks, for each day,
+ * the longest-duration period with a non-null value for `metric` (falling
+ * back to the longest period overall if every candidate is null). Pure
+ * function extracted from fetchMetricByDay's inline logic so it can be
+ * reused (and unit-tested) independently of any network call — see
+ * fetchMainSleepPeriodsByDay below and #46.
+ */
+export function selectMainPeriodPerDay(
+  periods: SleepPeriod[],
+  metric: Metric,
+): Map<string, SleepPeriod> {
+  const byDay = new Map<string, SleepPeriod[]>();
+  for (const p of periods) {
+    if (p.type !== "sleep" && p.type !== "long_sleep") continue;
+    const list = byDay.get(p.day) ?? [];
+    list.push(p);
+    byDay.set(p.day, list);
+  }
+  const chosen = new Map<string, SleepPeriod>();
+  for (const [day, group] of byDay) {
+    const sorted = [...group].sort(
+      (a, b) => (b.total_sleep_duration ?? 0) - (a.total_sleep_duration ?? 0),
+    );
+    const picked = sorted.find((p) => sleepMetricValue(metric, p) !== null) ?? sorted[0];
+    if (picked) chosen.set(day, picked);
+  }
+  return chosen;
+}
+
+/**
+ * Like `fetchMetricByDay` for sleep-derived metrics, but returns the chosen
+ * SleepPeriod per day instead of just the scalar value. Used by
+ * `oura_baseline_compare` (#46) to surface `bedtime_start`/`bedtime_end` for
+ * the night backing a given day's value, so a caller can tell which physical
+ * night was actually matched — important near the Oura sync boundary where
+ * a requested date's `day` may resolve to an older, already-synced night
+ * rather than the most recent (possibly still-unsynced) one.
+ */
+export async function fetchMainSleepPeriodsByDay(
+  client: OuraClient,
+  metric: Metric,
+  start: string,
+  end: string,
+): Promise<Map<string, SleepPeriod>> {
+  // Same ±1 day padding as fetchMetricByDay, for the same reason (Oura
+  // filters /sleep by bedtime_start, not by `day`).
+  const paddedRange = { start_date: addDays(start, -1), end_date: addDays(end, 1) };
+  const periods = await getSleepPeriods(client, paddedRange);
+  return selectMainPeriodPerDay(periods, metric);
+}
+
 export const METRIC_NAMES = [
   "readiness",
   "sleep_score",
@@ -205,48 +303,14 @@ export async function fetchMetricByDay(
       // single-day callers like baseline_compare see the same periods that
       // wider-window callers (hrv_trend, daily_readiness) see. We then
       // restrict the returned series back to [start, end] via buildSeries.
-      const paddedRange = {
-        start_date: addDays(start, -1),
-        end_date: addDays(end, 1),
-      };
-      const periods = await getSleepPeriods(client, paddedRange);
-
-      // Group periods by p.day and, for the requested metric, pick the
-      // longest-duration period whose value for that metric is non-null
-      // (falling back to the longest period overall if every value is
-      // null). Mirrors oura_hrv_trend's PR #10 dedup logic so cross-tool
-      // results agree on dates with multiple sleep periods (main + nap).
-      const valueFor = (p: SleepPeriod): number | null => {
-        switch (metric) {
-          case "hrv":
-            return p.average_hrv;
-          case "rhr":
-            return p.lowest_heart_rate;
-          case "sleep_total":
-            return p.total_sleep_duration;
-          case "deep_sleep":
-            return p.deep_sleep_duration;
-          case "rem_sleep":
-            return p.rem_sleep_duration;
-          case "respiratory_rate":
-            return p.average_breath;
-        }
-      };
-      const byDay = new Map<string, SleepPeriod[]>();
-      for (const p of periods) {
-        if (p.type !== "sleep" && p.type !== "long_sleep") continue;
-        const list = byDay.get(p.day) ?? [];
-        list.push(p);
-        byDay.set(p.day, list);
-      }
+      // Mirrors oura_hrv_trend's PR #10 dedup logic (via selectMainPeriodPerDay)
+      // so cross-tool results agree on dates with multiple sleep periods
+      // (main + nap). See fetchMainSleepPeriodsByDay for the period-level
+      // equivalent used by baseline_compare (#46).
+      const chosenByDay = await fetchMainSleepPeriodsByDay(client, metric, start, end);
       const source = new Map<string, number | null>();
-      for (const [day, group] of byDay) {
-        const sorted = [...group].sort(
-          (a, b) => (b.total_sleep_duration ?? 0) - (a.total_sleep_duration ?? 0),
-        );
-        const chosen = sorted.find((p) => valueFor(p) !== null) ?? sorted[0];
-        if (!chosen) continue;
-        source.set(day, valueFor(chosen));
+      for (const [day, chosen] of chosenByDay) {
+        source.set(day, sleepMetricValue(metric, chosen));
       }
       return buildSeries(start, end, source);
     }
