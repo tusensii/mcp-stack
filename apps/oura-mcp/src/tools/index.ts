@@ -25,6 +25,7 @@ import { registerWeeklyDigestTool } from "./weekly_digest.js";
 import { registerRespiratoryTrendTool } from "./respiratory_trend.js";
 import { registerIllnessSignalsTool } from "./illness_signals.js";
 import { registerSymptomOnsetDetectTool } from "./symptom_onset_detect.js";
+import { registerNightSummaryTool } from "./night_summary.js";
 
 export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerPersonalTools(server, client);
@@ -52,4 +53,5 @@ export function registerAllTools(server: McpServer, client: OuraClient): void {
   registerRespiratoryTrendTool(server, client);
   registerIllnessSignalsTool(server, client);
   registerSymptomOnsetDetectTool(server, client);
+  registerNightSummaryTool(server, client);
 }

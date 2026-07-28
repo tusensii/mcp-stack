@@ -6,6 +6,8 @@ import {
   METRIC_NAMES,
   addDays,
   fetchMetricByDay,
+  fetchMainSleepPeriodsByDay,
+  isSleepDerivedMetric,
 } from "../oura/metrics.js";
 import {
   defined,
@@ -16,6 +18,26 @@ import {
   percentileFromZ,
 } from "../oura/stats.js";
 import { textContent, errorContent, todayInTz } from "./utils.js";
+
+// #46: threshold (hours) beyond which a resolved night is flagged
+// `possibly_stale` — i.e. it ended long enough ago that a more recent
+// (possibly still-unsynced) night may exist and not be reflected here.
+// 12h was chosen because Oura sync typically completes well within a
+// morning; this is a static-analysis-derived heuristic (see comment at
+// call site) and has not been validated against live sync-lag data.
+export const STALE_THRESHOLD_HOURS = 12;
+
+/**
+ * Returns true when `bedtimeEndIso` (the end of the resolved sleep period)
+ * is more than STALE_THRESHOLD_HOURS before `now`. Pure/testable extraction
+ * of the #46 boundary check.
+ */
+export function isPossiblyStaleNight(bedtimeEndIso: string, now: Date): boolean {
+  const endMs = Date.parse(bedtimeEndIso);
+  if (isNaN(endMs)) return false;
+  const hoursSinceEnd = (now.getTime() - endMs) / 3_600_000;
+  return hoursSinceEnd > STALE_THRESHOLD_HOURS;
+}
 
 export function registerBaselineCompareTool(server: McpServer, client: OuraClient): void {
   server.tool(
@@ -28,7 +50,10 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
       "`actual_date_used` and `days_lag` in the response). The baseline window itself " +
       "remains anchored to the requested date. Default `fallback: \"strict\"` preserves " +
       "the no-data error behavior. " +
-      "Dates: \"date\" indexes the underlying metric — for sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, sleep_total, respiratory_rate) this is the date the sleep period started; for daily-report metrics (readiness, sleep_score, activity_score, spo2) this is the morning the score is reported on. The two conventions can refer to the same physiological night but different calendar dates.",
+      "Dates: \"date\" indexes the underlying metric — for sleep-derived metrics (hrv, rhr, deep_sleep, rem_sleep, sleep_total, respiratory_rate) this is the date the sleep period started; for daily-report metrics (readiness, sleep_score, activity_score, spo2) this is the morning the score is reported on. The two conventions can refer to the same physiological night but different calendar dates. " +
+      "For sleep-derived metrics, the response includes `bedtime_start`/`bedtime_end` of the sleep period the value actually came from, so you can confirm which night was matched. " +
+      "If that night ended more than 12 hours before the call was made, `possibly_stale: true` is set — this usually means the most recent night hasn't synced from the ring yet and an OLDER, already-synced night was matched instead (common for morning \"how did I sleep last night\" queries near the sync boundary). " +
+      "When `possibly_stale` is true, treat the result as \"most recent synced night\", not necessarily \"last night\", and consider retrying later or checking `oura_sleep_detail` directly.",
     {
       metric: z.enum(METRIC_NAMES).describe("Metric to compare against personal baseline."),
       date: z
@@ -103,6 +128,35 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
           }
         }
 
+        // #46: for sleep-derived metrics, resolve and expose which physical
+        // night (bedtime_start/bedtime_end) the matched value actually came
+        // from, and flag when that night ended long enough ago that a more
+        // recent (possibly still-unsynced) night could exist. This is a
+        // best-effort fix based on static analysis of the reported symptom
+        // (day-keyed lookup silently matching an older, already-synced
+        // night near the sync boundary) — it has NOT been verified against
+        // live Oura data / an actual sync-lag window, and the 12h threshold
+        // in isPossiblyStaleNight is a heuristic. Verify manually before
+        // relying on `possibly_stale` in production.
+        let nightBedtimeStart: string | null = null;
+        let nightBedtimeEnd: string | null = null;
+        let possiblyStale = false;
+        if (currentValue !== null && isSleepDerivedMetric(metric)) {
+          const dateUsed = actualDateUsed ?? compareDate;
+          const periodsByDay = await fetchMainSleepPeriodsByDay(
+            client,
+            metric,
+            dateUsed,
+            dateUsed,
+          );
+          const period = periodsByDay.get(dateUsed);
+          if (period) {
+            nightBedtimeStart = period.bedtime_start;
+            nightBedtimeEnd = period.bedtime_end;
+            possiblyStale = isPossiblyStaleNight(period.bedtime_end, new Date());
+          }
+        }
+
         const baselineValues = defined([...baselineSeries.values()]);
         const nDays = baselineValues.length;
 
@@ -165,6 +219,15 @@ export function registerBaselineCompareTool(server: McpServer, client: OuraClien
         if (actualDateUsed !== null) {
           result.actual_date_used = actualDateUsed;
           result.days_lag = daysLag;
+        }
+        if (nightBedtimeStart !== null && nightBedtimeEnd !== null) {
+          result.bedtime_start = nightBedtimeStart;
+          result.bedtime_end = nightBedtimeEnd;
+          result.possibly_stale = possiblyStale;
+          if (possiblyStale) {
+            result.stale_reason =
+              "Resolved night ended more than 12h before this call — a more recent night may exist but not yet be synced from the ring. This may not be the night you meant by \"last night\".";
+          }
         }
         if (note) result.note = note;
         return textContent(result);
