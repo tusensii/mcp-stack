@@ -8,6 +8,14 @@ name: deploy
 # Required repo secrets:
 #   CLOUDFLARE_API_TOKEN  — token with "Edit Cloudflare Workers" template
 #   CLOUDFLARE_ACCOUNT_ID — Cloudflare account ID
+#
+# Optional per-app override secrets:
+#   CLOUDFLARE_API_TOKEN_TRIP — trip-mcp is the only app with a KV namespace
+#     binding (CACHE), which the shared token above isn't scoped for
+#     (needs Workers KV Storage:Edit in addition to Workers Scripts:Edit).
+#     If this secret is set, trip-mcp's deploy step uses it instead of the
+#     shared token, so the shared token doesn't need broadening for every
+#     other app. See #28.
 
 on:
   push:
@@ -158,7 +166,11 @@ jobs:
       - if: steps.gate.outputs.should == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # trip-mcp binds a KV namespace, which needs Workers KV
+          # Storage:Edit — a scope the shared token intentionally doesn't
+          # carry. Use the optional per-app secret when it's set instead of
+          # widening the shared token for every other app (#28).
+          apiToken: ${{ matrix.app == 'trip-mcp' && (secrets.CLOUDFLARE_API_TOKEN_TRIP || secrets.CLOUDFLARE_API_TOKEN) || secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/${{ matrix.app }}
           command: deploy
