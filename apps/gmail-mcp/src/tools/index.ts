@@ -6,12 +6,13 @@ import { registerComposeTools } from "./compose.js";
 import { registerModifyTools } from "./modify.js";
 import { registerDeleteTools } from "./delete.js";
 import { registerFilterTools } from "./filters.js";
+import { registerAttachmentTools } from "./attachments.js";
 
 /**
  * Wire every Gmail tool onto an `McpServer`. Tool registration is split
  * into modules by Gmail API surface (labels, email, compose, modify,
- * delete, filters); each `register*Tools` call adds its tools onto the
- * server.
+ * delete, filters, attachments); each `register*Tools` call adds its
+ * tools onto the server.
  *
  * The `gmail` client is built once per request in `server.ts` and passed
  * in here so handlers can be plain closures rather than re-instantiating
@@ -24,4 +25,5 @@ export function registerAllTools(server: McpServer, gmail: gmail_v1.Gmail): void
   registerModifyTools(server, gmail);
   registerDeleteTools(server, gmail);
   registerFilterTools(server, gmail);
+  registerAttachmentTools(server, gmail);
 }
