@@ -10,7 +10,7 @@ import {
   getEnhancedTags,
   getWorkouts,
 } from "../oura/endpoints.js";
-import { textContent, errorContent, todayInTz } from "./utils.js";
+import { textContent, errorContent, todayInTz, titledTool } from "./utils.js";
 import { defined, mean, linearSlope } from "../oura/stats.js";
 import type { SleepPeriod } from "../oura/types.js";
 import { detectAnomalies, buildMetricSeries } from "./anomaly_detect.js";
@@ -54,8 +54,10 @@ function round1(x: number): number {
 }
 
 export function registerWeeklyDigestTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_weekly_digest",
+    "Compiling your weekly digest…",
     "Composite weekly summary across sleep, readiness, HRV, activity, anomalies, " +
       "and tags. Returns area-by-area numbers plus highlights (positive things) " +
       "and watch_outs (concerns). Default window is the 7 days ending the most " +

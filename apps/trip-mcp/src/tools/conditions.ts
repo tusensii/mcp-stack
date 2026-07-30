@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { Env, Source, ToolPayload, Confidence } from "../types.js";
 import { makeSource, nowIso, ok } from "../types.js";
 import { findAreaById, type Area } from "../areas.js";
-import { payloadResponse } from "./utils.js";
+import { payloadResponse, titledTool } from "./utils.js";
 import { getNpsAlerts, type NpsAlert } from "../sources/nps.js";
 import {
   getMountainPassConditions,
@@ -95,8 +95,10 @@ const argsSchema = {
 };
 
 export function registerConditionsTools(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "get_conditions",
+    "Checking current conditions…",
     "Composite trip-conditions snapshot for a PNW area or arbitrary point. Aggregates: NPS park alerts, WSDOT mountain pass conditions for the area's approach passes, WFIGS active fire perimeters intersecting a bbox around the area, and InciWeb PNW fire incidents. Each upstream source is isolated — one failure degrades to a named caveat rather than failing the whole call. USFS forest-page alert scraping is not yet implemented; `usfs_alerts` is always [] (check fs.usda.gov manually for forest-specific alerts when this matters). Use this for \"is there a fire near my route\" or \"is the road over Stevens Pass open\" questions. If `wsdot.passes` returns an error, the caveat will name it explicitly — point the user at wsdot.wa.gov/travel/real-time/mountainpasses directly. For shoulder-season trips (Apr–Jun, Oct–Nov) ALWAYS call this tool — pass status determines whether the trailhead is even reachable.",
     argsSchema,
     async ({ area_id, lat, lon, radius_km, approach_passes }) => {

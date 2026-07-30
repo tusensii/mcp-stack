@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
-import { resolveRepo, handleError, textContent, errorContent } from "./utils.js";
+import { resolveRepo, handleError, textContent, errorContent, titledTool } from "./utils.js";
 import { ensureLabelsExist } from "./label-sync.js";
 
 const repoArg = z
@@ -25,8 +25,10 @@ export function registerIssueTools(
     "everything else → grey); any names created this way are listed in the " +
     "response under 'auto_created_labels'.";
 
-  server.tool(
+  titledTool(
+    server,
     "github_create_issue",
+    "Filing an issue…",
     "Open a new GitHub issue. Title required; body, labels, assignees, milestone optional. " +
       "Unknown labels are auto-created rather than silently dropped — see the 'labels' " +
       "parameter description.",
@@ -65,8 +67,10 @@ export function registerIssueTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_get_issue",
+    "Reviewing an issue…",
     "Fetch a single issue by number.",
     {
       repo: repoArg,
@@ -84,8 +88,10 @@ export function registerIssueTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_list_issues",
+    "Reviewing issues…",
     "List issues in a repo. Note: GitHub's API treats pull requests as issues; " +
       "results may include PRs (filter on 'pull_request' field absence to exclude). " +
       "For cross-repo search with richer filters, use github_search_issues.",
@@ -114,8 +120,10 @@ export function registerIssueTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_update_issue",
+    "Updating an issue…",
     "Edit an issue: title, body, state, labels (replaces all), assignees (replaces all), milestone. " +
       "To close as 'not planned' rather than 'completed', set state_reason='not_planned'.",
     {
@@ -151,8 +159,10 @@ export function registerIssueTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_lock_issue",
+    "Locking an issue…",
     "Lock an issue to limit further conversation. Optional reason: off-topic, too heated, resolved, spam.",
     {
       repo: repoArg,
@@ -174,8 +184,10 @@ export function registerIssueTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_unlock_issue",
+    "Unlocking an issue…",
     "Unlock a previously locked issue.",
     {
       repo: repoArg,

@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getVo2Max } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerVo2MaxTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_vo2_max",
+    "Reviewing VO2 max…",
     "Returns VO2 max estimates (mL/kg/min) as calculated by Oura. " +
       "Updates infrequently — monthly or after significant training changes. " +
       "Dates: \"day\" is the calendar day the VO2 max estimate was computed/reported on.",

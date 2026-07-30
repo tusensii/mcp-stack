@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getSessions } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerSessionTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_sessions",
+    "Reviewing sessions…",
     "Returns ONLY user-initiated sessions logged manually in the Oura app " +
       "(meditation, breathing, relaxation, rest, and user-logged naps). " +
       "Does NOT include auto-detected naps from the sleep stream — for those, " +

@@ -4,7 +4,7 @@ import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailyActivity } from "../oura/endpoints.js";
 import type { DailyActivity } from "../oura/types.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 // Bulky per-sample fields stripped from DailyActivity when include_time_series
 // is false (#47): `met` is a ~700-sample per-minute array, `class_5_min` is a
@@ -28,8 +28,10 @@ export function stripActivityTimeSeries(
 }
 
 export function registerActivityTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_activity",
+    "Reviewing activity data…",
     "Returns daily activity scores (0-100), step count, active calories, total calories, " +
       "MET minutes by intensity, and time breakdowns. " +
       "All time fields (high_activity_time, sedentary_time, etc.) are in SECONDS. " +

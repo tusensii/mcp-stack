@@ -20,7 +20,7 @@ import {
   type OsmWaterSource,
 } from "../sources/osm.js";
 import { getElevation } from "../sources/usgs.js";
-import { payloadResponse, roundCoord } from "./utils.js";
+import { payloadResponse, roundCoord, titledTool } from "./utils.js";
 
 interface RouteInfoData {
   centroid: { lat: number; lon: number; area_id?: string; area_name?: string };
@@ -73,8 +73,10 @@ function haversineM(
 }
 
 export function registerRouteInfoTools(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "get_route_info",
+    "Reviewing route details…",
     "Returns trailheads, trails, water sources, and centroid elevation around a PNW area or arbitrary point. Pulls from OpenStreetMap (trails, parking, springs, streams, rivers) and USGS 3DEP (elevation). Trails are trimmed to the longest 10 by estimated length. Returns both `water_sources_within_500m` (strict — for \"is there water near camp\") and `water_sources_in_area` (radius-wide — for \"what water do I cross on this trail\"). Use this for first-pass route scouting; ALWAYS verify with a real trail map (Green Trails, USGS quad, or CalTopo) before the trip — OSM trail data has gaps and labels can be wrong. If you already have an `area_id` from `find_areas` or a prior tool call, pass it directly to avoid re-resolution. USGS elevation is sometimes flaky; if `centroid_elevation_ft` is null the source is omitted from citations and a caveat is added — surface the missing elevation to the user rather than inventing one.",
     {
       area_id: z.string().optional().describe("Known PNW area id (e.g. 'enchantments'). Overrides lat/lon."),

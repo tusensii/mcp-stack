@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail compose tools (`send_email`, `create_draft`). Tool name strings,
@@ -63,8 +63,10 @@ export function toBase64Url(str: string): string {
 }
 
 export function registerComposeTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "send_email",
+    "Sending an email…",
     "Send an email from your Gmail account.",
     {
       to: z.string().describe("Recipient email address"),
@@ -89,8 +91,10 @@ export function registerComposeTools(server: McpServer, gmail: gmail_v1.Gmail): 
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "create_draft",
+    "Drafting an email…",
     "Create a draft email without sending it.",
     {
       to: z.string().describe("Recipient email address"),

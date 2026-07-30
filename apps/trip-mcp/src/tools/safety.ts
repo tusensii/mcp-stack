@@ -3,7 +3,7 @@ import { z } from "zod";
 import { findAreaById, findAreaByText, type Area } from "../areas.js";
 import type { Env } from "../types.js";
 import { ok, empty, makeSource } from "../types.js";
-import { payloadResponse } from "./utils.js";
+import { payloadResponse, titledTool } from "./utils.js";
 
 interface SafetyBrief {
   area: { id: string; name: string };
@@ -66,8 +66,10 @@ const AVALANCHE_LIKELY = new Set([
 
 export function registerSafetyTools(server: McpServer, _env: Env): void {
   void _env;
-  server.tool(
+  titledTool(
+    server,
     "get_safety_brief",
+    "Preparing a safety brief…",
     "Returns a structured safety brief for a PNW area: bear canister rules, recent wildlife considerations, river crossing concerns (with named rivers and timing advice), avalanche-terrain flag, ranger station phone numbers, and area-specific Ten Essentials notes. ALWAYS INCLUDE THIS OUTPUT in answers to safety-critical queries (river crossings, snow travel, glacier travel, avalanche terrain, solo trips, off-trail routes, climbs). The ranger station phone numbers are the single most reliable source of real-time backcountry conditions — surface them prominently in your final answer to the user, not buried in a footnote. This is curated guidance, not real-time conditions: combine with `get_trip_reports` (recent ground-truth) and `get_conditions` (current alerts/fires/passes) for a complete picture. If you're answering a query about future conditions (snow level next month, river flow next week), explicitly tell the user this brief is general guidance and the ranger call is the only way to get current ground truth.",
     {
       area_id: z.string().optional(),

@@ -8,7 +8,7 @@ import {
   getDailyActivity,
   getSleepPeriods,
 } from "../oura/endpoints.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 import { defined, mean, stddev, zScore } from "../oura/stats.js";
 import type { SleepPeriod } from "../oura/types.js";
 
@@ -207,8 +207,10 @@ export function detectAnomalies(
 }
 
 export function registerAnomalyDetectTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_anomaly_detect",
+    "Scanning for anomalies…",
     "Flags days where a metric deviates from its rolling baseline by more than " +
       "z_threshold standard deviations. Scans each day in date_range against the " +
       "preceding baseline_window_days for each metric. Skips metrics with fewer than " +

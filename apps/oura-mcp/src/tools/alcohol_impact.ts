@@ -7,7 +7,7 @@ import {
   getEnhancedTags,
   getSleepPeriods,
 } from "../oura/endpoints.js";
-import { textContent, errorContent, todayInTz, daysAgoInTz } from "./utils.js";
+import { textContent, errorContent, todayInTz, daysAgoInTz, titledTool } from "./utils.js";
 import { defined, mean, stddev } from "../oura/stats.js";
 import type { SleepPeriod, EnhancedTag } from "../oura/types.js";
 
@@ -63,8 +63,10 @@ function computeMetricStats(alcoholVals: number[], nonAlcoholVals: number[]): Me
 }
 
 export function registerAlcoholImpactTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_alcohol_impact",
+    "Analyzing alcohol impact…",
     "Compares biometrics (HRV, deep sleep, RHR, readiness, sleep latency) between " +
       "alcohol-tagged days and non-alcohol days. Also estimates how many days HRV " +
       "takes to recover after an alcohol day. Tag is auto-discovered by name match " +

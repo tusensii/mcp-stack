@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail filter tools (`create_filter`, `list_filters`, `delete_filter`).
@@ -16,8 +16,10 @@ import { textContent, errorContent, formatGmailError } from "./utils.js";
  * lists no `required` arrays inside the nested objects.
  */
 export function registerFilterTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "create_filter",
+    "Creating an email filter…",
     "Create a Gmail filter that automatically applies actions to matching incoming emails. " +
       'For negation, use a minus prefix in the query field (e.g. query: "-from:noreply@example.com"). ' +
       "The negatedQuery field is not supported by the Gmail API.",
@@ -78,8 +80,10 @@ export function registerFilterTools(server: McpServer, gmail: gmail_v1.Gmail): v
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "list_filters",
+    "Reviewing email filters…",
     "List all active Gmail filters.",
     {},
     async () => {
@@ -93,8 +97,10 @@ export function registerFilterTools(server: McpServer, gmail: gmail_v1.Gmail): v
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "delete_filter",
+    "Deleting an email filter…",
     "Delete a Gmail filter by ID. Get filter IDs from list_filters.",
     {
       filterId: z.string().describe("Gmail filter ID to delete"),

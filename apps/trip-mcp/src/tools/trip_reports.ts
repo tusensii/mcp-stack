@@ -10,7 +10,7 @@ import type { Env } from "../types.js";
 import { empty, makeSource, ok } from "../types.js";
 import { findAreaById } from "../areas.js";
 import { searchTripReports, type TripReportSummary } from "../sources/wta.js";
-import { payloadResponse } from "./utils.js";
+import { payloadResponse, titledTool } from "./utils.js";
 
 const argsShape = {
   area_id: z
@@ -42,8 +42,10 @@ const argsShape = {
 };
 
 export function registerTripReportTools(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "get_trip_reports",
+    "Reading recent trip reports…",
     "Returns recent Washington Trails Association (WTA) trip reports for a PNW area or trail. Trip reports are user-submitted observations of actual conditions (snow level, water sources, blowdowns, road status, bug pressure) and are the single best source of recent ground-truth for WA hikes — better than AllTrails for this use case. Scraped from wta.org with attribution; cache may be up to 24h stale (medium confidence). Use `area_id` from `find_areas` when available; if no reports come back for the area name, the orchestrator will retry with the most distinctive alias (e.g., \"Image Lake\" instead of \"Glacier Peak Wilderness\"). PNW only — for non-WA trips this tool will return empty; fall back to `web_research`. If a report mentions a road closure, blowdown, or condition that contradicts an official source (e.g., USFS says trail open, report says blocked), surface BOTH to the user and recommend they call the ranger station to resolve.",
     argsShape,
     async ({ area_id, area_name, trail_name, since_days, limit }) => {

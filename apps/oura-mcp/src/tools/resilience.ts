@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailyResilience } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerResilienceTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_resilience",
+    "Reviewing resilience data…",
     "Returns daily resilience level (exceptional/strong/adequate/limited/poor) " +
       "and contributor scores for sleep recovery, daytime recovery, and stress. " +
       "Dates: \"day\" is the morning the resilience level is reported on (reflecting sleep ending that morning and the trailing recent period).",

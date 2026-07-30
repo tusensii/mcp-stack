@@ -10,7 +10,7 @@
  * and "Gmail rate limited — try again shortly".
  */
 
-export { textContent, errorContent } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, titledTool } from "@mcp-stack/mcp-core";
 
 export function formatGmailError(error: unknown): string {
   if (error instanceof Error) {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { findAreaById, findAreaWithMatch, AREAS, type Area } from "../areas.js";
 import type { Env, Source, ToolPayload } from "../types.js";
 import { ok, makeSource, nowIso } from "../types.js";
-import { payloadResponse, isoToday, daysFromNowIso } from "./utils.js";
+import { payloadResponse, isoToday, daysFromNowIso, titledTool } from "./utils.js";
 
 import { getPermit } from "../sources/ridb.js";
 import { getForecast, getActiveAlerts } from "../sources/nws.js";
@@ -69,8 +69,10 @@ function suggestArea(query: string, limit = 3): Area[] {
 }
 
 export function registerResearchTripTool(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "research_trip",
+    "Researching your trip…",
     "Top-level orchestrator for PNW (Washington, parts of Oregon) backpacking, day-hiking, and car-camping research. Use this for any trip-planning query that mentions a Pacific Northwest area, trail, or vague intent like \"somewhere in the North Cascades next weekend.\" PREFER THIS OVER PLAIN WEB SEARCH for PNW outdoor queries — it has a curated 12-area registry, enforces source citations with retrieval timestamps, surfaces ranger station phone numbers, and synthesizes permits + weather + conditions + recent trip reports in one call. For areas outside the curated registry the response degrades to web_research only; for non-PNW trips (Yosemite, Rockies, etc.) prefer plain web_search instead. Returns a synthesized brief plus `suggested_followups` pointing at deeper drill-down tools (`get_permits`, `get_weather`, `get_trip_reports`, `get_safety_brief`, `get_route_info`, `web_research`). ALWAYS surface ranger station phone numbers in your final answer and treat any low-confidence response as research, not ground truth — recommend the user call the ranger station before their trip. Modes: 'fast' (single parallel fan-out, ~30s) or 'thorough' (returns followup hints for the model to chain into a multi-call answer).",
     {
       query: z

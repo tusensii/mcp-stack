@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail email-content tools. Tool name strings, parameter shapes, and
@@ -103,8 +103,10 @@ function extractBody(part: MimePart, depth = 0): string {
 const MAX_BODY_CHARS = 2_500;
 
 export function registerEmailTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "search_emails",
+    "Searching your email…",
     'Search Gmail using Gmail search syntax (e.g. "is:unread", "from:boss@example.com", "newer_than:7d"). ' +
       "Returns message IDs, thread IDs, and snippets. Pass nextPageToken from a previous response as pageToken to fetch the next page.",
     {
@@ -139,8 +141,10 @@ export function registerEmailTools(server: McpServer, gmail: gmail_v1.Gmail): vo
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "read_email",
+    "Reading an email…",
     "Read the full content of an email by message ID. Returns headers, decoded body, and attachment filenames.",
     {
       messageId: z.string().describe("Gmail message ID"),

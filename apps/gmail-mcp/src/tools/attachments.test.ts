@@ -9,15 +9,14 @@ type ToolHandler = (args: Record<string, unknown>) => Promise<{
 }>;
 
 /**
- * Minimal fake of the `McpServer` surface `registerAttachmentTools` uses:
- * capture each registered tool's handler by name so tests can invoke it
+ * Minimal fake of the `McpServer` surface `registerAttachmentTools` uses
+ * (via `titledTool`): capture each registered tool's handler by name so tests can invoke it
  * directly, bypassing the MCP transport entirely.
  */
 function fakeServer() {
   const handlers = new Map<string, ToolHandler>();
   const server = {
-    tool: (name: string, ..._rest: unknown[]) => {
-      const cb = _rest[_rest.length - 1] as ToolHandler;
+    registerTool: (name: string, _config: unknown, cb: ToolHandler) => {
       handlers.set(name, cb);
     },
   } as unknown as McpServer;
