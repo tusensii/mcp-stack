@@ -1,7 +1,7 @@
 import { GitHubApiError } from "../github/client.js";
 import { errorContent, type McpToolResponse } from "@mcp-stack/mcp-core";
 
-export { textContent, errorContent } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, titledTool } from "@mcp-stack/mcp-core";
 
 const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 

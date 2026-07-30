@@ -17,7 +17,7 @@ import {
   interpretZ,
   percentileFromZ,
 } from "../oura/stats.js";
-import { textContent, errorContent, todayInTz } from "./utils.js";
+import { textContent, errorContent, todayInTz, titledTool } from "./utils.js";
 
 // #46: threshold (hours) beyond which a resolved night is flagged
 // `possibly_stale` — i.e. it ended long enough ago that a more recent
@@ -40,8 +40,10 @@ export function isPossiblyStaleNight(bedtimeEndIso: string, now: Date): boolean 
 }
 
 export function registerBaselineCompareTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_baseline_compare",
+    "Comparing against baseline…",
     "Compares a single day's metric value against the user's personal rolling baseline. " +
       "Returns z-score, percentile, delta vs baseline mean, and a categorical interpretation. " +
       "Baseline window excludes the comparison date itself. " +

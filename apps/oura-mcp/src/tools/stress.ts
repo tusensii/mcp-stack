@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailyStress } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerStressTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_stress",
+    "Reviewing stress data…",
     "Returns daily stress metrics: stress_high (seconds in high-stress state), " +
       "recovery_high (seconds in high-recovery state), and day_summary label " +
       "(restored/normal/stressful/unknown). Both time fields are in SECONDS. " +

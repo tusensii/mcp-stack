@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getEnhancedTags } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerTagTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_tags",
+    "Reviewing tags…",
     "Returns user-created tags (enhanced format). " +
       "Each tag has a start_day, tag_type_code, optional comment text, " +
       "optional custom_name, and start/end times. " +

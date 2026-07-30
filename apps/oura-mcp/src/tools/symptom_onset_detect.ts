@@ -11,6 +11,7 @@ import {
   todayInTz,
   daysAgoInTz,
   validateDateRange,
+  titledTool,
 } from "./utils.js";
 
 const BASELINE_WINDOW = 28;
@@ -50,8 +51,10 @@ function zForDay(
 }
 
 export function registerSymptomOnsetDetectTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_symptom_onset_detect",
+    "Pinpointing symptom onset…",
     "Scans a date window for clusters of biometric anomalies indicative of illness " +
       "onset. For each day, computes z-scores for body temperature deviation, respiratory " +
       "rate, resting heart rate, and HRV using a 28-day rolling baseline ending the day " +

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail permanent-deletion tools (`delete_email`, `batch_delete_emails`).
@@ -10,8 +10,10 @@ import { textContent, errorContent, formatGmailError } from "./utils.js";
  * implementation in `gmail-mcp-worker/src/tools/delete.ts`.
  */
 export function registerDeleteTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "delete_email",
+    "Permanently deleting an email…",
     "PERMANENT — Delete an email, bypassing trash. This cannot be undone. " +
       'Use modify_email_labels with removeLabelIds:["INBOX"] to archive instead.',
     {
@@ -28,8 +30,10 @@ export function registerDeleteTools(server: McpServer, gmail: gmail_v1.Gmail): v
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "batch_delete_emails",
+    "Permanently deleting emails…",
     "PERMANENT — Delete multiple emails, bypassing trash. This cannot be undone. " +
       'Use batch_modify_emails with removeLabelIds:["INBOX"] to archive instead.',
     {

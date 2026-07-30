@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getHeartrate } from "../oura/endpoints.js";
-import { validateDatetimeRange, textContent, errorContent } from "./utils.js";
+import { validateDatetimeRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerHeartrateTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_heartrate",
+    "Reviewing heart rate data…",
     "Returns time-series heart rate samples as { bpm, source, timestamp } objects. " +
       "source is one of: awake, rest, sleep, session, live, workout. " +
       "Timestamps are ISO 8601. Samples are ~5-minute intervals during rest/sleep. " +

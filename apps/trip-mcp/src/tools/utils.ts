@@ -1,5 +1,5 @@
 import type { ToolPayload } from "../types.js";
-export { textContent, errorContent, formatToolError } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, formatToolError, titledTool } from "@mcp-stack/mcp-core";
 
 /** Wrap a ToolPayload as the JSON body of a text MCP response. */
 export function payloadResponse<T>(payload: ToolPayload<T>) {

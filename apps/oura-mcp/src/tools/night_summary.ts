@@ -6,7 +6,7 @@ import { getDailySleep, getDailyReadiness, getSleepPeriods } from "../oura/endpo
 import { addDays, fetchMetricByDay, fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 import { defined, mean } from "../oura/stats.js";
 import type { SleepPeriod } from "../oura/types.js";
-import { todayInTz, textContent, errorContent } from "./utils.js";
+import { todayInTz, textContent, errorContent, titledTool } from "./utils.js";
 
 // How many days back to search for "the most recent synced night" when no
 // `date` is given. 3 days comfortably covers a normal sync-lag window.
@@ -48,8 +48,10 @@ export function mostRecentNight(periods: SleepPeriod[]): SleepPeriod | undefined
 }
 
 export function registerNightSummaryTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_night_summary",
+    "Summarizing your night…",
     "Composite tool: answers 'how did I sleep?' in a single call by combining the sleep score " +
       "and contributors (from oura_daily_sleep), stage durations/HR/HRV/latency/efficiency highlights " +
       "(from oura_sleep_detail, stripped of bulky time-series arrays), the same-morning readiness score " +

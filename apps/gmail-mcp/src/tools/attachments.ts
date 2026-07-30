@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 import { collectAttachments, type MimePart } from "./email.js";
 
 /**
@@ -22,8 +22,10 @@ import { collectAttachments, type MimePart } from "./email.js";
  * referenced in the PR that introduced this file.
  */
 export function registerAttachmentTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "list_attachments",
+    "Reviewing attachments…",
     "List attachment metadata for a Gmail message by message ID: filename, MIME type, " +
       "size in bytes, and attachmentId. Pass the attachmentId to get_attachment to fetch content.",
     {
@@ -47,8 +49,10 @@ export function registerAttachmentTools(server: McpServer, gmail: gmail_v1.Gmail
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "get_attachment",
+    "Fetching an attachment…",
     "Fetch a Gmail attachment's raw content by message ID and attachmentId (from " +
       "list_attachments). Returns the attachment's base64url-encoded data, per the Gmail API, " +
       "and its size in bytes.",

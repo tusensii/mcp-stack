@@ -17,7 +17,7 @@ import {
 } from "../sources/ridb.js";
 import type { Confidence, Env, Source, ToolPayload } from "../types.js";
 import { empty, makeSource, nowIso, ok } from "../types.js";
-import { payloadResponse } from "./utils.js";
+import { payloadResponse, titledTool } from "./utils.js";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -112,8 +112,10 @@ function selfIssuedPayload(area: Area): ToolPayload<GetPermitsData> {
 }
 
 export function registerPermitTools(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "get_permits",
+    "Reviewing permit requirements…",
     "Returns Recreation.gov permit metadata for a PNW backpacking area: permit name, recreation.gov URL, application window dates, fees, lottery context, and historical odds where known (Enchantments Core Zone <5%, Snow Zone ~15%, etc.). For self-issued USFS wilderness areas (Glacier Peak, Pasayten, Henry M. Jackson) returns a static USFS pointer plus the local ranger station phone — there is no advance reservation system to query. If you already have an `area_id` from `find_areas` or a prior tool call in this conversation, pass it directly. Use this BEFORE `check_availability` to confirm the permit system is `rec_gov_lottery` or `rec_gov_reservation` — `check_availability` is meaningless for self-issued areas.",
     {
       area_id: z.string().optional().describe("Canonical area id, e.g. 'enchantments', 'mt_rainier'."),
@@ -206,8 +208,10 @@ export function registerPermitTools(server: McpServer, env: Env): void {
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "check_availability",
+    "Checking permit availability…",
     "Checks live Recreation.gov permit availability for a date range. ONLY meaningful for `rec_gov_lottery` and `rec_gov_reservation` permit systems — call `get_permits` first to confirm the area uses one of these systems and to obtain the permit_id. For `self_issued` areas (Glacier Peak, Pasayten, most USFS wilderness) skip this tool entirely and use `get_permits` for the kiosk and ranger pointer. Returns the raw availability grid plus a one-line summary. Note: lottery permits (e.g., Enchantments 233273, 445863) may not return live availability through this endpoint because lotteries aren't \"availability\" in the campsite-grid sense — for lottery odds and windows, the `area.notes` from `find_areas` carries the curated context.",
     {
       permit_id: z.string().describe("RIDB permit id, e.g. '233273' for the Enchantments."),

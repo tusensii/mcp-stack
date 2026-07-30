@@ -72,4 +72,4 @@ export function validateDatetimeRange(
   return undefined;
 }
 
-export { textContent, errorContent } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, titledTool } from "@mcp-stack/mcp-core";

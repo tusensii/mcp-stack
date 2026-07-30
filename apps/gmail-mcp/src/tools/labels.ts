@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail label tools. Tool name strings, descriptions, input parameter
@@ -13,8 +13,10 @@ import { textContent, errorContent, formatGmailError } from "./utils.js";
  * the exact byte-for-byte payload the old JSON-RPC dispatcher returned.
  */
 export function registerLabelTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "list_email_labels",
+    "Reviewing email labels…",
     "List all Gmail labels (system labels like INBOX, SENT, plus any user-created labels).",
     {},
     async () => {
@@ -34,8 +36,10 @@ export function registerLabelTools(server: McpServer, gmail: gmail_v1.Gmail): vo
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "create_label",
+    "Creating an email label…",
     "Create a new Gmail label.",
     {
       name: z.string().describe("Label name"),
@@ -61,8 +65,10 @@ export function registerLabelTools(server: McpServer, gmail: gmail_v1.Gmail): vo
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "update_label",
+    "Updating an email label…",
     "Rename or change visibility of an existing Gmail label.",
     {
       labelId: z.string().describe("Gmail label ID"),
@@ -90,8 +96,10 @@ export function registerLabelTools(server: McpServer, gmail: gmail_v1.Gmail): vo
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "delete_label",
+    "Deleting an email label…",
     "Delete a Gmail label. System labels (INBOX, SENT, etc.) cannot be deleted.",
     {
       labelId: z.string().describe("Gmail label ID to delete"),
@@ -106,8 +114,10 @@ export function registerLabelTools(server: McpServer, gmail: gmail_v1.Gmail): vo
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "get_or_create_label",
+    "Finding or creating an email label…",
     "Return an existing label by exact name, or create it if it does not exist. Name match is case-sensitive.",
     {
       name: z.string().describe("Label name to find or create"),
