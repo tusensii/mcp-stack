@@ -16,6 +16,8 @@ export {
   textContent,
   errorContent,
   formatToolError,
+  multiContent,
   type McpToolResponse,
+  type ToolContentItem,
 } from "./responses.js";
 export { AuthExpired, RateLimited } from "./errors.js";

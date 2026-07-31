@@ -33,7 +33,9 @@ describe("textContent", () => {
 
   it("pretty-prints objects as JSON", () => {
     const out = textContent({ ok: true });
-    expect(out.content[0]?.text).toBe('{\n  "ok": true\n}');
+    const item = out.content[0];
+    expect(item?.type).toBe("text");
+    expect(item && "text" in item ? item.text : undefined).toBe('{\n  "ok": true\n}');
   });
 });
 
