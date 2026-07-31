@@ -10,7 +10,7 @@ import {
 } from "../oura/metrics.js";
 import { getEnhancedTags } from "../oura/endpoints.js";
 import { defined, mean, median, stddev } from "../oura/stats.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 
 interface PeriodStats {
   mean: number | null;
@@ -37,8 +37,10 @@ export function registerInterventionAnalysisTool(
   server: McpServer,
   client: OuraClient,
 ): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_intervention_analysis",
+    "Analyzing an intervention…",
     "Compares metric values in a window before vs after an intervention date " +
       "(e.g. dietary change, new medication, schedule shift). An exclusion window " +
       "around the intervention date is dropped to avoid washout effects. " +

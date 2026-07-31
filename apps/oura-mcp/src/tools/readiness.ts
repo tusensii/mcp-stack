@@ -6,7 +6,7 @@ import { getDailyReadiness, getSleepPeriods } from "../oura/endpoints.js";
 import { addDays, fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 import { defined, mean } from "../oura/stats.js";
 import type { DailyReadiness, SleepPeriod } from "../oura/types.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 // Rolling window (days) used to compute personal baselines for raw biometric
 // values. Matches the "recent trend" framing Oura itself uses for contributor
@@ -61,8 +61,10 @@ function rollingBaseline(
 }
 
 export function registerReadinessTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_readiness",
+    "Reviewing readiness scores…",
     "Returns daily readiness scores (0-100) and contributor breakdown. " +
       "Contributors include HRV balance, resting heart rate, sleep balance, " +
       "activity balance, body temperature, and sleep regularity. " +

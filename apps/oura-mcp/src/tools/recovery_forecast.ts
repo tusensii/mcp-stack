@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailyReadiness } from "../oura/endpoints.js";
-import { textContent, errorContent, todayInTz } from "./utils.js";
+import { textContent, errorContent, todayInTz, titledTool } from "./utils.js";
 import { mean, stddev, linearSlope, interpretSlope } from "../oura/stats.js";
 
 /** Add N days to YYYY-MM-DD. */
@@ -18,8 +18,10 @@ function clamp(value: number, lo: number, hi: number): number {
 }
 
 export function registerRecoveryForecastTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_recovery_forecast",
+    "Forecasting recovery…",
     "Forecasts a single day's readiness score using recent trend plus regression " +
       "toward a 30-day mean. Returns predicted_readiness with a confidence band " +
       "(±1 stddev of recent values, clamped 0-100), trend label, and basis string. " +

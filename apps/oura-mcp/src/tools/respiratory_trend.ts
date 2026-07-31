@@ -10,6 +10,7 @@ import {
   errorContent,
   resolveDateRange,
   validateDateRange,
+  titledTool,
 } from "./utils.js";
 
 interface RespiratoryTrendEntry {
@@ -38,8 +39,10 @@ function pickPeriodForRespiratory(periods: SleepPeriod[]): SleepPeriod | undefin
 }
 
 export function registerRespiratoryTrendTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_respiratory_trend",
+    "Reviewing respiratory trends…",
     "Derived tool: fetches detailed sleep periods and returns a clean date-indexed " +
       "respiratory-rate series. One entry per date — when Oura reports multiple sleep " +
       "periods for a night, the longest period wins (with fallback to the next-longest " +

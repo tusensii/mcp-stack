@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AREAS, findAreaById, findAreaWithMatch, type Area } from "../areas.js";
 import type { Env } from "../types.js";
 import { ok, makeSource } from "../types.js";
-import { payloadResponse } from "./utils.js";
+import { payloadResponse, titledTool } from "./utils.js";
 
 interface AreaSummary {
   id: string;
@@ -37,8 +37,10 @@ function summarize(area: Area, match_reason?: string): AreaSummary {
 
 export function registerFindAreasTools(server: McpServer, _env: Env): void {
   void _env;
-  server.tool(
+  titledTool(
+    server,
     "find_areas",
+    "Finding wilderness areas…",
     "Resolve free-text area queries to canonical area records from the curated PNW registry (currently 12 hand-curated areas: Enchantments, Mt Rainier, North Cascades NP, Olympic NP, Glacier Peak Wilderness, Pasayten, Alpine Lakes Wilderness, Henry M. Jackson Wilderness, Goat Rocks, Mt St Helens, Mt Adams, Mt Baker). Returns area IDs that all other tools accept as `area_id`. This is the right first call for any vague PNW query like \"somewhere in the North Cascades\" or when you're not sure of the canonical area name. For areas outside the registry the response is empty — fall back to `web_research` for the trip details and use `get_weather` with explicit lat/lon. Match types: \"Exact name/alias match\" (high confidence), \"Substring/partial match\" (medium confidence — verify the resolved area is what the user actually meant before relying on it). If the resolved area looks wrong given the user's full query, surface that to the user and re-query with a more distinctive term.",
     {
       query: z

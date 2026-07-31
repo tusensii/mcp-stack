@@ -3,7 +3,8 @@
  * `agents` package. Apps register tools with `McpServer` from the SDK
  * directly (using their own Zod schemas); `mcp-core` only owns the
  * cross-cutting concerns: URL path-secret check, tool-response shape,
- * and a small set of error classes for the auth packages to throw.
+ * display-title registration (`titledTool`), and a small set of error
+ * classes for the auth packages to throw.
  *
  * The Workers-only `createMcpWorker` lives at the `/worker` subpath
  * so that loading `@mcp-stack/mcp-core` in Node (for tests, build
@@ -21,3 +22,4 @@ export {
   type ToolContentItem,
 } from "./responses.js";
 export { AuthExpired, RateLimited } from "./errors.js";
+export { titledTool } from "./titled-tool.js";

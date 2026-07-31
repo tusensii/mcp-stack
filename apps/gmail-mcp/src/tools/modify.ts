@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, formatGmailError } from "./utils.js";
+import { textContent, errorContent, formatGmailError, titledTool } from "./utils.js";
 
 /**
  * Gmail label-modification tools (`modify_email_labels`,
@@ -11,8 +11,10 @@ import { textContent, errorContent, formatGmailError } from "./utils.js";
  * `gmail-mcp-worker/src/tools/modify.ts`.
  */
 export function registerModifyTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "modify_email_labels",
+    "Updating labels on an email…",
     'Add or remove labels on a single email. Archive by passing removeLabelIds: ["INBOX"]. ' +
       "Get label IDs from list_email_labels.",
     {
@@ -38,8 +40,10 @@ export function registerModifyTools(server: McpServer, gmail: gmail_v1.Gmail): v
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "batch_modify_emails",
+    "Updating labels on emails…",
     "Apply the same label change to multiple emails in a single API call (up to 1000 message IDs). " +
       'Archive pattern: removeLabelIds: ["INBOX"].',
     {

@@ -1,11 +1,13 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
-import { handleError, textContent } from "./utils.js";
+import { handleError, textContent, titledTool } from "./utils.js";
 
 export function registerSearchTools(server: McpServer, client: GitHubClient): void {
-  server.tool(
+  titledTool(
+    server,
     "github_search_issues",
+    "Searching issues…",
     "Search issues and pull requests across all repos accessible to the token. " +
       "Uses GitHub's search syntax — examples: " +
       "'repo:tusensii/mcp-stack is:issue is:open label:bug', " +

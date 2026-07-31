@@ -2,11 +2,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getRingConfiguration } from "../oura/endpoints.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerRingTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_ring_configuration",
+    "Checking ring configuration…",
     "Returns hardware and firmware information about your Oura ring: size, color, design, firmware version.",
     {},
     async () => {

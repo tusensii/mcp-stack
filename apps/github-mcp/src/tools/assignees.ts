@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
-import { resolveRepo, handleError, textContent } from "./utils.js";
+import { resolveRepo, handleError, textContent, titledTool } from "./utils.js";
 
 const repoArg = z
   .string()
@@ -14,8 +14,10 @@ export function registerAssigneeTools(
   defaultRepo: string | undefined,
   allowedRepos: Set<string> | undefined,
 ): void {
-  server.tool(
+  titledTool(
+    server,
     "github_add_assignees",
+    "Assigning an issue…",
     "Add assignees to an issue (additive). Usernames must have access to the repo.",
     {
       repo: repoArg,
@@ -37,8 +39,10 @@ export function registerAssigneeTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_remove_assignees",
+    "Unassigning an issue…",
     "Remove specific assignees from an issue.",
     {
       repo: repoArg,

@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
-import { resolveRepo, handleError, textContent } from "./utils.js";
+import { resolveRepo, handleError, textContent, titledTool } from "./utils.js";
 
 const repoArg = z
   .string()
@@ -14,8 +14,10 @@ export function registerCommentTools(
   defaultRepo: string | undefined,
   allowedRepos: Set<string> | undefined,
 ): void {
-  server.tool(
+  titledTool(
+    server,
     "github_add_issue_comment",
+    "Commenting on an issue…",
     "Post a comment on an issue.",
     {
       repo: repoArg,
@@ -37,8 +39,10 @@ export function registerCommentTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_list_issue_comments",
+    "Reviewing issue comments…",
     "List comments on an issue.",
     {
       repo: repoArg,
@@ -62,8 +66,10 @@ export function registerCommentTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_update_issue_comment",
+    "Editing an issue comment…",
     "Edit an issue comment by its comment ID (not issue number).",
     {
       repo: repoArg,
@@ -85,8 +91,10 @@ export function registerCommentTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_delete_issue_comment",
+    "Deleting an issue comment…",
     "Delete an issue comment by its comment ID.",
     {
       repo: repoArg,

@@ -17,7 +17,7 @@ import {
   type NwsAlert,
   type NwsForecastPeriod,
 } from "../sources/nws.js";
-import { payloadResponse, roundCoord } from "./utils.js";
+import { payloadResponse, roundCoord, titledTool } from "./utils.js";
 
 interface WeatherData {
   location: {
@@ -50,8 +50,10 @@ function summarizeAfd(productText: string): string {
 }
 
 export function registerWeatherTools(server: McpServer, env: Env): void {
-  server.tool(
+  titledTool(
+    server,
     "get_weather",
+    "Checking mountain weather…",
     "Returns NWS forecast (daily + optional hourly), active alerts, and the latest Area Forecast Discussion for a point. Either supply `area_id` (resolves to that area's centroid) or explicit lat/lon. Use this to assess go/no-go for a backpacking trip. CRITICAL CAVEATS to surface in your answer: (1) forecast confidence drops materially past 72 hours — for trips further out, recommend re-checking within 24h of departure; (2) NWS point forecasts are at valley elevations; expect 5–10°F cooler and significantly more precipitation at 6,000+ ft passes; (3) for any backcountry go/no-go decision involving snow, river crossings, or storms, surface the ranger station phone from `get_safety_brief` alongside this forecast — the ranger has real-time ground truth the forecast doesn't. The Area Forecast Discussion (include_afd: true, default) contains the meteorologist's narrative confidence assessment and is often the most useful field — quote it when relevant.",
     {
       lat: z.number().min(-90).max(90).optional().describe("Latitude (decimal). Ignored if area_id is supplied."),

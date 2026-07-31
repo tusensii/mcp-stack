@@ -2,11 +2,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getPersonalInfo } from "../oura/endpoints.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerPersonalTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_personal_info",
+    "Reviewing profile info…",
     "Returns your Oura profile: age, weight (kg), height (m), biological sex, and email.",
     {},
     async () => {

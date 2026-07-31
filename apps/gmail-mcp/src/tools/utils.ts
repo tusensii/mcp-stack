@@ -10,7 +10,7 @@
  * and "Gmail rate limited — try again shortly".
  */
 
-export { textContent, errorContent, multiContent } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, multiContent, titledTool } from "@mcp-stack/mcp-core";
 
 /**
  * Gmail attachment `data` is base64url (RFC 4648 §5: `-`/`_`, no padding).

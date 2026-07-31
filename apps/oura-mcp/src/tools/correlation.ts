@@ -11,7 +11,7 @@ import {
 } from "../oura/metrics.js";
 import { getEnhancedTags } from "../oura/endpoints.js";
 import { pearson, interpretPearson } from "../oura/stats.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 
 const VALID_METRICS = new Set<string>(METRIC_NAMES);
 
@@ -63,8 +63,10 @@ async function fetchSeries(
 }
 
 export function registerCorrelationTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_correlation",
+    "Analyzing correlations…",
     "Pearson correlation between two daily series over a date range. " +
       "Each input may be a metric name (readiness, sleep_score, hrv, rhr, sleep_total, " +
       "deep_sleep, rem_sleep, respiratory_rate, spo2, activity_score) or a tag (prefix " +

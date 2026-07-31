@@ -8,7 +8,7 @@ import {
   type Metric,
 } from "../oura/metrics.js";
 import { defined, mean, median, stddev } from "../oura/stats.js";
-import { textContent, errorContent } from "./utils.js";
+import { textContent, errorContent, titledTool } from "./utils.js";
 
 interface PeriodStats {
   mean: number | null;
@@ -32,8 +32,10 @@ function summarize(values: ReadonlyArray<number | null>): PeriodStats {
 }
 
 export function registerPeriodCompareTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_period_compare",
+    "Comparing time periods…",
     "Side-by-side comparison of two arbitrary date ranges across one or more metrics. " +
       "Returns mean/median/stddev for each period plus delta_mean (b-a), delta_pct, " +
       "and a rough `meaningfully_different` flag (|delta| > 1 stddev of period A — " +

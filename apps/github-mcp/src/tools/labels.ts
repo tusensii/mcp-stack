@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { GitHubClient } from "../github/client.js";
-import { resolveRepo, handleError, textContent } from "./utils.js";
+import { resolveRepo, handleError, textContent, titledTool } from "./utils.js";
 import { ensureLabelsExist } from "./label-sync.js";
 
 const repoArg = z
@@ -24,8 +24,10 @@ export function registerLabelTools(
   defaultRepo: string | undefined,
   allowedRepos: Set<string> | undefined,
 ): void {
-  server.tool(
+  titledTool(
+    server,
     "github_add_labels",
+    "Adding issue labels…",
     "Add labels to an issue (additive; existing labels kept). Labels that don't yet exist " +
       "on the repo are created automatically (color chosen by a naming heuristic: app:* → " +
       "purple, other prefix:* labels → blue, unprefixed → grey); any names created this way " +
@@ -55,8 +57,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_set_labels",
+    "Replacing issue labels…",
     "Replace all labels on an issue with the provided set. Pass empty array to clear. Labels " +
       "that don't yet exist on the repo are created automatically (color chosen by a naming " +
       "heuristic: app:* → purple, other prefix:* labels → blue, unprefixed → grey); any names created " +
@@ -86,8 +90,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_remove_label",
+    "Removing an issue label…",
     "Remove a single label from an issue.",
     {
       repo: repoArg,
@@ -108,8 +114,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_create_label",
+    "Creating a repo label…",
     "Create a new label on a repo. 'color' is required by the GitHub API (6-digit hex, no leading #). Fails with a 422 error if a label with the same name already exists — use github_update_label to change an existing one.",
     {
       repo: repoArg,
@@ -131,8 +139,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_update_label",
+    "Updating a repo label…",
     "Update an existing repo label by its current name. Can rename (new_name), recolor (color), or change description. Only provided fields are sent.",
     {
       repo: repoArg,
@@ -160,8 +170,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_delete_label",
+    "Deleting a repo label…",
     "Delete a label from a repo by name. CASCADE WARNING: this also removes the label from every issue and pull request currently using it. Use with care — to merely take a label off one issue, use github_remove_label instead.",
     {
       repo: repoArg,
@@ -181,8 +193,10 @@ export function registerLabelTools(
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "github_list_repo_labels",
+    "Reviewing repo labels…",
     "List labels defined on a repo.",
     {
       repo: repoArg,

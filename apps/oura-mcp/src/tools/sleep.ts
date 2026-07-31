@@ -12,6 +12,7 @@ import {
   validateDateRange,
   textContent,
   errorContent,
+  titledTool,
 } from "./utils.js";
 import type { HrvTrendEntry, SleepPeriod } from "../oura/types.js";
 import { fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
@@ -106,8 +107,10 @@ export function filterPeriodsByType(
 }
 
 export function registerSleepTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_sleep",
+    "Reviewing sleep scores…",
     "Returns daily sleep scores and contributor breakdown for a date range. " +
       "Score is 0-100. All contributor values are 0-100 on a higher-is-better scale " +
       "(e.g. high `latency` means short time to fall asleep, not long latency). " +
@@ -130,8 +133,10 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "oura_sleep_detail",
+    "Reviewing sleep details…",
     "Returns detailed per-period sleep data including stage durations (seconds), " +
       "average and lowest heart rate (bpm), average HRV (ms RMSSD), sleep latency (seconds), " +
       "efficiency (0-100), and bedtime start/end. " +
@@ -187,8 +192,10 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "oura_naps",
+    "Checking for naps…",
     "Returns only auto-detected nap periods (type === \"nap\" || type === \"late_nap\") from the " +
       "/sleep stream. This is the right tool for \"did the user nap in window X?\" — `oura_sessions` " +
       "only returns user-initiated sessions, not auto-detected naps. " +
@@ -231,8 +238,10 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "oura_sleep_time_recommendation",
+    "Checking bedtime recommendations…",
     "Returns Oura's recommended sleep time window and status for each day. " +
       "Includes optimal_bedtime offsets (minutes from midnight) and recommendation label. " +
       "Dates: \"day\" is the date the recommendation applies to (the evening of that calendar day).",
@@ -254,8 +263,10 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "oura_hrv_trend",
+    "Reviewing HRV trends…",
     "Derived tool: fetches detailed sleep periods and returns a clean date-indexed HRV series " +
       "with exactly one row per date (longest sleep period per day; falls back to next-longest if the longest has null HRV). " +
       "Fields per entry: date, average_hrv (ms RMSSD), lowest_hrv (ms RMSSD), " +

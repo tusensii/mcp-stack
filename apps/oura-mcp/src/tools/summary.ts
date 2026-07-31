@@ -6,11 +6,13 @@ import {
   getDailyReadiness,
   getDailyActivity,
 } from "../oura/endpoints.js";
-import { todayInTz, daysAgoInTz, textContent, errorContent } from "./utils.js";
+import { todayInTz, daysAgoInTz, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerSummaryTools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_summary_today",
+    "Summarizing your day…",
     "Convenience tool: fetches today's and yesterday's sleep score, readiness score, " +
       "and activity score in parallel. Returns a compact merged object keyed by date. " +
       "Use this as the first tool when the user asks 'how am I doing?' or wants a daily overview. " +

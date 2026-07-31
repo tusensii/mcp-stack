@@ -11,7 +11,7 @@ import {
   zScore,
   percentileFromZ,
 } from "../oura/stats.js";
-import { textContent, errorContent, todayInTz } from "./utils.js";
+import { textContent, errorContent, todayInTz, titledTool } from "./utils.js";
 
 type TempStatus = "normal" | "elevated" | "febrile";
 type ExertionCeiling = "rest" | "zone_2_only" | "moderate" | "unrestricted";
@@ -124,8 +124,10 @@ function decideExertionCeiling(
 }
 
 export function registerIllnessSignalsTool(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_illness_signals",
+    "Checking for illness signals…",
     "Composite illness/recovery signal report for a single day. Aggregates body " +
       "temperature deviation, respiratory rate, HRV, RHR, and readiness score (each " +
       "compared to a 30-day rolling baseline that excludes the target date itself) " +

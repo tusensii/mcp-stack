@@ -1,7 +1,14 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { gmail_v1 } from "googleapis";
 import { z } from "zod";
-import { textContent, errorContent, multiContent, base64UrlToBase64, formatGmailError } from "./utils.js";
+import {
+  textContent,
+  errorContent,
+  multiContent,
+  base64UrlToBase64,
+  formatGmailError,
+  titledTool,
+} from "./utils.js";
 import { collectAttachments, type MimePart } from "./email.js";
 
 /**
@@ -37,8 +44,10 @@ const IMAGE_MIME_TYPES = new Set([
   "image/gif",
 ]);
 export function registerAttachmentTools(server: McpServer, gmail: gmail_v1.Gmail): void {
-  server.tool(
+  titledTool(
+    server,
     "list_attachments",
+    "Reviewing attachments…",
     "List attachment metadata for a Gmail message by message ID: filename, MIME type, " +
       "size in bytes, and attachmentId. Pass the attachmentId to get_attachment to fetch content.",
     {
@@ -62,8 +71,10 @@ export function registerAttachmentTools(server: McpServer, gmail: gmail_v1.Gmail
     },
   );
 
-  server.tool(
+  titledTool(
+    server,
     "get_attachment",
+    "Fetching an attachment…",
     "Fetch a Gmail attachment's content by message ID and attachmentId (from " +
       "list_attachments). Common image types (png/jpeg/webp/gif) are returned as a viewable " +
       "image; PDFs are returned as an embedded document resource. Everything else falls back " +

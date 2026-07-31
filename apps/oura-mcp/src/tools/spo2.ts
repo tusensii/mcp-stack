@@ -3,11 +3,13 @@ import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
 import { getDailySpo2 } from "../oura/endpoints.js";
-import { resolveDateRange, validateDateRange, textContent, errorContent } from "./utils.js";
+import { resolveDateRange, validateDateRange, textContent, errorContent, titledTool } from "./utils.js";
 
 export function registerSpo2Tools(server: McpServer, client: OuraClient): void {
-  server.tool(
+  titledTool(
+    server,
     "oura_daily_spo2",
+    "Reviewing blood oxygen data…",
     "Returns average blood oxygen saturation (SpO2) percentage per night. " +
       "spo2_percentage.average is a percentage value (e.g. 97.3). " +
       "null means insufficient data for that night. " +
