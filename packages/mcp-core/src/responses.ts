@@ -5,8 +5,25 @@
 
 import { AuthExpired, RateLimited } from "./errors.js";
 
+/**
+ * A single MCP tool-response content item. Beyond plain text, the SDK's
+ * `CallToolResult` also allows `image` (inline base64, standard alphabet —
+ * NOT base64url) and `resource` (an embedded blob/text resource, e.g. a
+ * PDF) so the client can render/handle rich content natively instead of
+ * everything collapsing to a text blob.
+ */
+export type ToolContentItem =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string }
+  | {
+      type: "resource";
+      resource:
+        | { uri: string; mimeType?: string; blob: string }
+        | { uri: string; mimeType?: string; text: string };
+    };
+
 export interface McpToolResponse {
-  content: Array<{ type: "text"; text: string }>;
+  content: ToolContentItem[];
   isError?: true;
   /**
    * The MCP SDK's `CallToolResult` is an open shape (allows `_meta` and
@@ -28,6 +45,15 @@ export function textContent(data: unknown): McpToolResponse {
 /** Wrap a message as a tool error response. */
 export function errorContent(message: string): McpToolResponse {
   return { content: [{ type: "text", text: message }], isError: true };
+}
+
+/**
+ * Wrap arbitrary content items (text, image, resource) as a successful
+ * tool response — for handlers that need to return more than one item,
+ * or a non-text item, in a single result.
+ */
+export function multiContent(items: ToolContentItem[]): McpToolResponse {
+  return { content: items };
 }
 
 /**

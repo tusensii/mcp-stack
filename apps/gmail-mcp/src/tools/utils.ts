@@ -10,7 +10,19 @@
  * and "Gmail rate limited — try again shortly".
  */
 
-export { textContent, errorContent, titledTool } from "@mcp-stack/mcp-core";
+export { textContent, errorContent, multiContent, titledTool } from "@mcp-stack/mcp-core";
+
+/**
+ * Gmail attachment `data` is base64url (RFC 4648 §5: `-`/`_`, no padding).
+ * MCP `image`/`resource` content blocks expect standard base64 (`+`/`/`,
+ * padded) since that's what clients' base64 decoders and the Claude API
+ * expect — this is a real re-encoding, not a rename.
+ */
+export function base64UrlToBase64(data: string): string {
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = (4 - (base64.length % 4)) % 4;
+  return base64 + "=".repeat(padding);
+}
 
 export function formatGmailError(error: unknown): string {
   if (error instanceof Error) {

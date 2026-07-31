@@ -143,12 +143,32 @@ describe("list_attachments", () => {
 });
 
 describe("get_attachment", () => {
-  it("fetches attachment bytes and returns base64url data verbatim with size", async () => {
+  function mockMessageWithPart(mimeType: string) {
+    return {
+      data: {
+        payload: {
+          mimeType: "multipart/mixed",
+          parts: [
+            {
+              mimeType,
+              filename: "file",
+              body: { attachmentId: "att-1", size: 42 },
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  it("falls back to raw base64url text data for non-image/PDF types", async () => {
     const gmail = fakeGmail();
     const { server, handlers } = fakeServer();
     registerAttachmentTools(server, gmail);
 
     const base64url = "SGVsbG8t_1234"; // contains '-' and '_' — must not be re-encoded
+    (gmail.users.messages.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockMessageWithPart("text/plain"),
+    );
     (
       gmail.users.messages.attachments.get as unknown as ReturnType<typeof vi.fn>
     ).mockResolvedValue({
@@ -161,6 +181,7 @@ describe("get_attachment", () => {
     });
     const parsed = JSON.parse(result.content[0]!.text);
 
+    expect(result.content).toHaveLength(1);
     expect(parsed).toEqual({
       messageId: "msg-1",
       attachmentId: "att-1",
@@ -174,11 +195,74 @@ describe("get_attachment", () => {
     });
   });
 
+  it("returns an image content block for image MIME types, re-encoded to standard base64", async () => {
+    const gmail = fakeGmail();
+    const { server, handlers } = fakeServer();
+    registerAttachmentTools(server, gmail);
+
+    const base64url = "SGVsbG8t_1234";
+    (gmail.users.messages.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockMessageWithPart("image/png"),
+    );
+    (
+      gmail.users.messages.attachments.get as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      data: { size: 42, data: base64url },
+    });
+
+    const result = await handlers.get("get_attachment")!({
+      messageId: "msg-1",
+      attachmentId: "att-1",
+    });
+
+    expect(result.content).toHaveLength(2);
+    expect(result.content[0]).toMatchObject({ type: "text" });
+    expect(result.content[1]).toEqual({
+      type: "image",
+      data: "SGVsbG8t/1234===",
+      mimeType: "image/png",
+    });
+  });
+
+  it("returns a resource content block for PDFs", async () => {
+    const gmail = fakeGmail();
+    const { server, handlers } = fakeServer();
+    registerAttachmentTools(server, gmail);
+
+    const base64url = "SGVsbG8t_1234";
+    (gmail.users.messages.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockMessageWithPart("application/pdf"),
+    );
+    (
+      gmail.users.messages.attachments.get as unknown as ReturnType<typeof vi.fn>
+    ).mockResolvedValue({
+      data: { size: 42, data: base64url },
+    });
+
+    const result = await handlers.get("get_attachment")!({
+      messageId: "msg-1",
+      attachmentId: "att-1",
+    });
+
+    expect(result.content).toHaveLength(2);
+    expect(result.content[1]).toEqual({
+      type: "resource",
+      resource: {
+        uri: "gmail-attachment://msg-1/att-1",
+        mimeType: "application/pdf",
+        blob: "SGVsbG8t/1234===",
+      },
+    });
+  });
+
   it("returns errorContent on Gmail API failure", async () => {
     const gmail = fakeGmail();
     const { server, handlers } = fakeServer();
     registerAttachmentTools(server, gmail);
 
+    (gmail.users.messages.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      mockMessageWithPart("text/plain"),
+    );
     (
       gmail.users.messages.attachments.get as unknown as ReturnType<typeof vi.fn>
     ).mockRejectedValue(new Error("429 Rate Limit Exceeded"));
@@ -189,5 +273,14 @@ describe("get_attachment", () => {
     });
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain("Gmail rate limited");
+  });
+});
+
+describe("base64UrlToBase64", () => {
+  it("converts '-' to '+' and '_' to '/' and pads to a multiple of 4", async () => {
+    const { base64UrlToBase64 } = await import("./utils.js");
+    expect(base64UrlToBase64("SGVsbG8t_1234")).toBe("SGVsbG8t/1234===");
+    expect(base64UrlToBase64("YQ")).toBe("YQ==");
+    expect(base64UrlToBase64("YWJj")).toBe("YWJj");
   });
 });
