@@ -13,6 +13,11 @@ import { userAgent } from "../tools/utils.js";
 const BASE_URL = "https://developer.nps.gov/api/v1";
 
 function client(env: Env) {
+  if (!env.NPS_API_KEY) {
+    throw new Error(
+      "missing NPS_API_KEY secret — get a free key at nps.gov/subjects/developer/get-started.htm and `wrangler secret put NPS_API_KEY`",
+    );
+  }
   return createFetchClient({
     baseUrl: BASE_URL,
     userAgent: userAgent(env.CONTACT),

@@ -48,6 +48,39 @@ describe("createFetchClient", () => {
     expect(sent.get("User-Agent")).toBe("mcp-stack-test/1.0");
   });
 
+  it("preserves the base URL's path prefix for leading-slash paths", async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+
+    const client = createFetchClient({ baseUrl: "https://api.example.com/api/v1" });
+    await client.json("/alerts?parkCode=mora");
+
+    const [calledUrl] = fetchMock.mock.calls[0] ?? [];
+    expect(calledUrl).toBe("https://api.example.com/api/v1/alerts?parkCode=mora");
+  });
+
+  it("joins relative paths and trailing-slash bases with a single slash", async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+
+    const client = createFetchClient({ baseUrl: "https://api.example.com/api/v1/" });
+    await client.json("alerts");
+
+    const [calledUrl] = fetchMock.mock.calls[0] ?? [];
+    expect(calledUrl).toBe("https://api.example.com/api/v1/alerts");
+  });
+
+  it("passes absolute URLs through untouched even with a baseUrl set", async () => {
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+
+    const client = createFetchClient({ baseUrl: "https://api.example.com/api/v1" });
+    await client.json("https://other.example.org/x");
+
+    const [calledUrl] = fetchMock.mock.calls[0] ?? [];
+    expect(calledUrl).toBe("https://other.example.org/x");
+  });
+
   it("throws HttpError on non-2xx with the body attached", async () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     fetchMock.mockResolvedValue(new Response("nope", { status: 404, statusText: "Not Found" }));
