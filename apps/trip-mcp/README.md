@@ -54,6 +54,8 @@ Add as a custom connector in claude.ai → Settings → Connectors → Add custo
 
 ## Caveats
 
+- `get_conditions` NPS alerts require the free `NPS_API_KEY` secret (nps.gov/subjects/developer/get-started.htm); a missing key surfaces as a named caveat rather than an HTTP status.
+- WSDOT pass conditions require the free `WSDOT_API_KEY` access code (wsdot.wa.gov/traffic/api/), passed as the `AccessCode` query param. A 401 means the code is missing, expired, or rotated — re-issue and `wrangler secret put WSDOT_API_KEY`.
 - WTA has no API; the scraper uses regex-based HTML parsing and will need babysitting when WTA redesigns. Snapshot test in `src/sources/wta.test.ts`.
 - USFS forest-page scraping is not yet implemented; `get_conditions` returns an empty `usfs_alerts` array with a caveat.
 - Auth is shared-secret-in-URL — fine for ≤10 trusted friends, not acceptable for the Anthropic Connectors Directory submission. Marketplace prep requires OAuth 2.1 (see Phase 3 in the original build plan).
