@@ -46,6 +46,13 @@ export interface OsmWaterSource {
   geometry?: Array<{ lat: number; lon: number }>;
 }
 
+interface OverpassMember {
+  type?: string;
+  ref?: number;
+  role?: string;
+  geometry?: Array<{ lat: number; lon: number }>;
+}
+
 interface OverpassElement {
   type: "node" | "way" | "relation";
   id: number;
@@ -55,7 +62,7 @@ interface OverpassElement {
   center?: { lat: number; lon: number };
   tags?: Record<string, string>;
   geometry?: Array<{ lat: number; lon: number }>;
-  members?: unknown[];
+  members?: OverpassMember[];
 }
 
 interface OverpassResponse {
@@ -135,7 +142,129 @@ function geomLengthM(geom: Array<{ lat: number; lon: number }> | undefined): num
   return Math.round(total);
 }
 
+// --- Trail-name matching -------------------------------------------------
+
+/**
+ * Normalize a USFS-style trail-number query — "724", "#724", "Trail 724",
+ * "trail #724" — to the bare number, or null if the query isn't one.
+ */
+function refNumberFromQuery(q: string): string | null {
+  const m = q.trim().match(/^(?:trail\s*)?#?(\d{1,5}(?:\.\d+)?)$/i);
+  return m ? m[1]! : null;
+}
+
+/**
+ * Case-insensitive trail-name match across OSM naming tags, not just
+ * `name`: alt_name, loc_name, official_name, and the USFS trail number
+ * in `ref` (which may be "724", "#724", or a semicolon list). Popular
+ * names often differ from OSM's — "Gothic Basin" is OSM's "Weden Creek
+ * Trail" (USFS #724) — so single-field matching misses real trails.
+ */
+export function trailMatchesQuery(tags: Record<string, string> | undefined, query: string): boolean {
+  const q = query.toLowerCase().trim();
+  if (!q) return true;
+  if (!tags) return false;
+  for (const field of [tags.name, tags.alt_name, tags.loc_name, tags.official_name]) {
+    if (field && field.toLowerCase().includes(q)) return true;
+  }
+  const wanted = refNumberFromQuery(q);
+  if (wanted && tags.ref) {
+    const refs = tags.ref.split(/[;,]/).map((r) => r.trim().replace(/^(?:trail\s*)?#?/i, ""));
+    if (refs.includes(wanted)) return true;
+  }
+  return false;
+}
+
 // --- Public API ----------------------------------------------------------
+
+export interface OsmGeometry {
+  /** e.g. "way/123" or "relation/456" */
+  id: string;
+  name: string;
+  ref?: string;
+  points: Array<{ lat: number; lon: number }>;
+}
+
+/**
+ * Fetch the polyline geometry of one OSM element. Accepts "way/123",
+ * "relation/456", or a bare numeric id (assumed way). For relations,
+ * member-way geometries are concatenated in member order — OSM does not
+ * guarantee ordering, so treat relation output as approximate.
+ */
+export async function getOsmGeometry(env: Env, osmId: string): Promise<OsmGeometry | null> {
+  const m = osmId.trim().match(/^(?:(way|relation)\/)?(\d+)$/i);
+  if (!m) return null;
+  const type = (m[1] ?? "way").toLowerCase();
+  const id = m[2]!;
+  const key = `osm:geom:${type}/${id}`;
+  return cached(env, key, TTL.OSM, async () => {
+    const query = `[out:json][timeout:25];${type}(${id});out tags geom;`;
+    const elements = await runOverpass(env, query);
+    const el = elements[0];
+    if (!el) return null;
+    const points: Array<{ lat: number; lon: number }> = [];
+    if (el.geometry && el.geometry.length > 0) {
+      points.push(...el.geometry);
+    } else if (el.members) {
+      for (const member of el.members) {
+        if (member.type === "way" && member.geometry) points.push(...member.geometry);
+      }
+    }
+    if (points.length === 0) return null;
+    const result: OsmGeometry = {
+      id: `${el.type}/${el.id}`,
+      name: el.tags?.name ?? el.tags?.ref ?? "",
+      points,
+    };
+    if (el.tags?.ref) result.ref = el.tags.ref;
+    return result;
+  });
+}
+
+/**
+ * Find the trail near a point whose naming tags match `query` and return
+ * the longest matching way's geometry. Used by the profile tools to turn
+ * "trail_name + lat/lon hint" into a polyline.
+ */
+export async function findTrailGeometryByName(
+  env: Env,
+  bbox: Bbox,
+  query: string,
+): Promise<OsmGeometry | null> {
+  const key = `osm:trailgeom:${bboxKey(bbox)}:${query.toLowerCase().trim()}`;
+  return cached(env, key, TTL.OSM, async () => {
+    const swne = bboxAsSwne(bbox);
+    const q =
+      `[out:json][timeout:25];` +
+      `(` +
+      `way["highway"~"path|footway|track"]["foot"!~"no"](${swne});` +
+      `relation["route"="hiking"](${swne});` +
+      `);` +
+      `out tags geom;`;
+    const elements = await runOverpass(env, q);
+    let best: OverpassElement | null = null;
+    let bestLen = 0;
+    for (const el of elements) {
+      if (!trailMatchesQuery(el.tags, query)) continue;
+      const geom =
+        el.geometry ??
+        el.members?.flatMap((mem) => (mem.type === "way" && mem.geometry ? mem.geometry : []));
+      const len = geomLengthM(geom);
+      if (geom && geom.length > 1 && len > bestLen) {
+        best = { ...el, geometry: geom };
+        bestLen = len;
+      }
+    }
+    if (!best || !best.geometry) return null;
+    const result: OsmGeometry = {
+      id: `${best.type}/${best.id}`,
+      name: best.tags?.name ?? best.tags?.ref ?? "",
+      points: best.geometry,
+    };
+    if (best.tags?.ref) result.ref = best.tags.ref;
+    return result;
+  });
+}
 
 export async function findTrails(env: Env, bbox: Bbox): Promise<OsmTrail[]> {
   const key = `osm:trails:${bboxKey(bbox)}`;
