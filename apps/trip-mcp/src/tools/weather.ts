@@ -17,7 +17,23 @@ import {
   type NwsAlert,
   type NwsForecastPeriod,
 } from "../sources/nws.js";
+import {
+  OPEN_METEO_ATTRIBUTION,
+  getPointForecast,
+  type OpenMeteoDaily,
+  type OpenMeteoHourly,
+} from "../sources/openmeteo.js";
 import { payloadResponse, roundCoord, titledTool } from "./utils.js";
+
+interface ElevationAdjustedBlock {
+  provider: "open-meteo";
+  /** Elevation the caller asked the model to correct to. */
+  elevation_ft: number;
+  /** Elevation the model actually applied (echoed back by the API). */
+  model_elevation_ft: number;
+  daily: OpenMeteoDaily[];
+  hourly?: OpenMeteoHourly[];
+}
 
 interface WeatherData {
   location: {
@@ -32,6 +48,8 @@ interface WeatherData {
   hourly?: NwsForecastPeriod[];
   alerts: NwsAlert[];
   afd_summary: string;
+  /** Present only when `elevation_ft` was supplied. */
+  elevation_adjusted?: ElevationAdjustedBlock;
 }
 
 const STANDARD_CAVEATS = [
@@ -54,7 +72,7 @@ export function registerWeatherTools(server: McpServer, env: Env): void {
     server,
     "get_weather",
     "Checking mountain weather…",
-    "Returns NWS forecast (daily + optional hourly), active alerts, and the latest Area Forecast Discussion for a point. Either supply `area_id` (resolves to that area's centroid) or explicit lat/lon. Use this to assess go/no-go for a backpacking trip. CRITICAL CAVEATS to surface in your answer: (1) forecast confidence drops materially past 72 hours — for trips further out, recommend re-checking within 24h of departure; (2) NWS point forecasts are at valley elevations; expect 5–10°F cooler and significantly more precipitation at 6,000+ ft passes; (3) for any backcountry go/no-go decision involving snow, river crossings, or storms, surface the ranger station phone from `get_safety_brief` alongside this forecast — the ranger has real-time ground truth the forecast doesn't. The Area Forecast Discussion (include_afd: true, default) contains the meteorologist's narrative confidence assessment and is often the most useful field — quote it when relevant.",
+    "Returns NWS forecast (daily + optional hourly), active alerts, and the latest Area Forecast Discussion for a point. Either supply `area_id` (resolves to that area's centroid) or explicit lat/lon. Use this to assess go/no-go for a backpacking trip. NWS point forecasts cannot distinguish elevations within a ~2.5 km grid cell — a trailhead and a basin 2,600 ft above it get the identical forecast. Pass `elevation_ft` (e.g. from get_elevation_profile) to ALSO get an `elevation_adjusted` block: an Open-Meteo forecast with the model's hypsometric altitude correction applied at that elevation, including freezing_level_height in feet — directly useful for snow-level questions. The adjusted block is a model correction, not a mountain-station observation, and precipitation type/amount remain grid-scale. The NWS payload is never replaced — alerts and the AFD narrative have no Open-Meteo equivalent. CRITICAL CAVEATS to surface in your answer: (1) forecast confidence drops materially past 72 hours — for trips further out, recommend re-checking within 24h of departure; (2) for any backcountry go/no-go decision involving snow, river crossings, or storms, surface the ranger station phone from `get_safety_brief` alongside this forecast — the ranger has real-time ground truth the forecast doesn't. The Area Forecast Discussion (include_afd: true, default) contains the meteorologist's narrative confidence assessment and is often the most useful field — quote it when relevant.",
     {
       lat: z.number().min(-90).max(90).optional().describe("Latitude (decimal). Ignored if area_id is supplied."),
       lon: z.number().min(-180).max(180).optional().describe("Longitude (decimal). Ignored if area_id is supplied."),
@@ -63,8 +81,16 @@ export function registerWeatherTools(server: McpServer, env: Env): void {
       include_alerts: z.boolean().default(true).describe("Fetch active NWS alerts for the point."),
       include_afd: z.boolean().default(true).describe("Fetch the latest Area Forecast Discussion."),
       include_hourly: z.boolean().default(false).describe("Include the hourly forecast (large)."),
+      elevation_ft: z
+        .number()
+        .min(-500)
+        .max(15000)
+        .optional()
+        .describe(
+          "Target elevation in feet. When set, adds an `elevation_adjusted` Open-Meteo block with altitude-corrected temperatures and freezing level; NWS output is unchanged.",
+        ),
     },
-    async ({ lat, lon, area_id, days, include_alerts, include_afd, include_hourly }) => {
+    async ({ lat, lon, area_id, days, include_alerts, include_afd, include_hourly, elevation_ft }) => {
       let resolvedLat: number | undefined = lat;
       let resolvedLon: number | undefined = lon;
       let areaName: string | undefined;
@@ -93,12 +119,27 @@ export function registerWeatherTools(server: McpServer, env: Env): void {
       try {
         const point = await getPoint(env, rlat, rlon);
 
-        const [forecast, hourly, alerts, afd] = await Promise.all([
+        const wantAdjusted = typeof elevation_ft === "number";
+        const [forecast, hourly, alerts, afd, adjustedResult] = await Promise.all([
           getForecast(env, rlat, rlon).catch(() => null),
           include_hourly ? getHourlyForecast(env, rlat, rlon).catch(() => null) : Promise.resolve(null),
           include_alerts ? getActiveAlerts(env, rlat, rlon).catch(() => [] as NwsAlert[]) : Promise.resolve([] as NwsAlert[]),
           include_afd && point.forecastOffice
             ? getAreaForecastDiscussion(env, point.forecastOffice).catch(() => null)
+            : Promise.resolve(null),
+          wantAdjusted
+            ? getPointForecast(env, {
+                lat: rlat,
+                lon: rlon,
+                elevationM: elevation_ft! / 3.28084,
+                days,
+              }).then(
+                (f) => ({ ok: true as const, forecast: f }),
+                (e: unknown) => ({
+                  ok: false as const,
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              )
             : Promise.resolve(null),
         ]);
 
@@ -156,6 +197,31 @@ export function registerWeatherTools(server: McpServer, env: Env): void {
           );
         }
 
+        let adjusted: ElevationAdjustedBlock | undefined;
+        let adjustedError: string | undefined;
+        if (adjustedResult) {
+          if (adjustedResult.ok) {
+            adjusted = {
+              provider: "open-meteo",
+              elevation_ft: Math.round(elevation_ft!),
+              model_elevation_ft: adjustedResult.forecast.model_elevation_ft,
+              daily: adjustedResult.forecast.daily,
+              ...(include_hourly
+                ? { hourly: adjustedResult.forecast.hourly.slice(0, days * 24) }
+                : {}),
+            };
+            sources.push(
+              makeSource(
+                "https://open-meteo.com/en/docs",
+                OPEN_METEO_ATTRIBUTION,
+                { license: "CC BY 4.0", confidence: "medium" },
+              ),
+            );
+          } else {
+            adjustedError = `open_meteo_forecast: ${adjustedResult.error} — elevation_adjusted block unavailable; NWS payload unaffected.`;
+          }
+        }
+
         // Confidence: high if alert data is fresh (<1h), otherwise medium.
         let confidence: Confidence = "medium";
         if (include_alerts && alerts.length > 0) {
@@ -186,11 +252,20 @@ export function registerWeatherTools(server: McpServer, env: Env): void {
           ...(hourlyPeriods ? { hourly: hourlyPeriods } : {}),
           alerts,
           afd_summary: afd ? summarizeAfd(afd.productText) : "",
+          ...(adjusted ? { elevation_adjusted: adjusted } : {}),
         };
 
-        const caveats = [...STANDARD_CAVEATS];
+        // With an adjusted block present, swap the generic "mountains may be
+        // colder" caveat for a specific description of what the block models.
+        const caveats = adjusted
+          ? [
+              STANDARD_CAVEATS[0]!,
+              `elevation_adjusted block models temperature at ${adjusted.elevation_ft} ft (Open-Meteo hypsometric correction; medium confidence — a model adjustment, not a station observation). Precipitation type/amount are still grid-scale.`,
+            ]
+          : [...STANDARD_CAVEATS];
         if (!forecast) caveats.push("NWS daily forecast unavailable.");
         if (include_afd && !afd) caveats.push("Area Forecast Discussion unavailable.");
+        if (adjustedError) caveats.push(adjustedError);
 
         const payload: ToolPayload<WeatherData> = ok(data, sources, confidence, caveats);
         return payloadResponse(payload);
