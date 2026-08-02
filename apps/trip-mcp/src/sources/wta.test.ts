@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseHikeListing,
+  parseHikePage,
   parseTripReport,
   parseTripReportListing,
 } from "./wta.js";
@@ -247,5 +248,61 @@ describe("parseHikeListing", () => {
 
   it("returns [] on empty input", () => {
     expect(parseHikeListing("")).toEqual([]);
+  });
+});
+
+// Reduced from the live /go-hiking/hikes/gothic-basin page (probed
+// 2026-08-02): JSON-LD GeoCoordinates + map payload + hike-stats <dl>.
+const HIKE_PAGE_FIXTURE = `
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "TouristAttraction", "name": "Gothic Basin",
+ "aggregateRating": {"@type": "AggregateRating", "ratingValue": 4.6},
+ "geo": {"@type": "GeoCoordinates", "latitude": 48.0261166667, "longitude": -121.4425}}
+</script>
+<h1 class="documentFirstHeading">Gothic Basin</h1>
+<div class="hike-region"><span>North Cascades -- Mountain Loop Highway</span></div>
+<dl class="hike-stats grid-container grid-container--auto-small">
+  <div class="hike-stats__stat">
+    <dt> <img alt="" src="/distance.svg" /> Length </dt>
+    <dd>9.2 miles, roundtrip</dd>
+  </div>
+  <div class="hike-stats__stat">
+    <dt> <img alt="" src="/elevationgain.svg" /> Elevation Gain </dt>
+    <dd> 2,840 feet </dd>
+  </div>
+  <div class="hike-stats__stat">
+    <dt> <img alt="" src="/highest-point.svg" /> Highest Point </dt>
+    <dd> 5,200 feet </dd>
+  </div>
+</dl>
+<script>
+  hike = {"trailhead": [-121.4425, 48.0261166667], "id": "gothic-basin", "title": "Gothic Basin"};
+</script>`;
+
+describe("parseHikePage", () => {
+  it("extracts coordinates from JSON-LD geo plus stats from the hike-stats dl", () => {
+    const out = parseHikePage(HIKE_PAGE_FIXTURE, "https://www.wta.org/go-hiking/hikes/gothic-basin");
+    expect(out).toMatchObject({
+      hike_name: "Gothic Basin",
+      lat: 48.0261166667,
+      lon: -121.4425,
+      length_miles: 9.2,
+      gain_ft: 2840,
+      highest_point_ft: 5200,
+    });
+  });
+
+  it("falls back to the lon-first trailhead array when JSON-LD geo is absent", () => {
+    const noGeo = HIKE_PAGE_FIXTURE.replace(/"geo":[^}]*\}\}/, '"x": 1}');
+    const out = parseHikePage(noGeo, "https://www.wta.org/go-hiking/hikes/gothic-basin");
+    expect(out.lat).toBeCloseTo(48.0261166667, 6);
+    expect(out.lon).toBeCloseTo(-121.4425, 6);
+  });
+
+  it("returns nulls, never throws, on unrecognized markup", () => {
+    const out = parseHikePage("<html><body>redesigned</body></html>", "https://www.wta.org/x");
+    expect(out.lat).toBeNull();
+    expect(out.lon).toBeNull();
+    expect(out.length_miles).toBeNull();
   });
 });

@@ -1,9 +1,64 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AREAS, findAreaById, findAreaWithMatch, type Area } from "../areas.js";
-import type { Env } from "../types.js";
-import { ok, makeSource } from "../types.js";
+import type { Env, Source } from "../types.js";
+import { ok, makeSource, nowIso } from "../types.js";
+import { getHikeDetail, searchHikes } from "../sources/wta.js";
 import { payloadResponse, titledTool } from "./utils.js";
+
+/**
+ * Off-registry record synthesized from WTA's hiking guide when the
+ * curated registry has no match. Per-request only — never added to the
+ * registry, and carries no `area_id` (downstream tools must be called
+ * with this record's lat/lon).
+ */
+interface WtaFallbackRecord {
+  source: "wta_fallback";
+  name: string;
+  lat: number;
+  lon: number;
+  length_miles: number | null;
+  elevation_gain_ft: number | null;
+  highest_point_ft: number | null;
+  region: string | null;
+  wta_url: string;
+  alternates: Array<{ hike_name: string; url: string; region: string | null }>;
+}
+
+/**
+ * Resolve an off-registry query against WTA's hiking guide (3,500+ WA
+ * trails). Scrape-backed, so this fails soft: any error or missing
+ * coordinate degrades to null and the caller keeps the empty-registry
+ * behavior.
+ */
+async function wtaFallback(env: Env, query: string): Promise<WtaFallbackRecord | null> {
+  try {
+    const hits = await searchHikes(env, query);
+    const top = hits[0];
+    if (!top) return null;
+    const detail = await getHikeDetail(env, top.url);
+    if (!detail || detail.lat === null || detail.lon === null) return null;
+    return {
+      source: "wta_fallback",
+      name: detail.hike_name ?? top.hike_name,
+      lat: detail.lat,
+      lon: detail.lon,
+      length_miles: detail.length_miles ?? top.length_miles,
+      elevation_gain_ft: detail.gain_ft ?? top.gain_ft,
+      highest_point_ft: detail.highest_point_ft,
+      region: detail.region ?? top.region,
+      wta_url: detail.url,
+      alternates: hits.slice(1, 4).map((h) => ({
+        hike_name: h.hike_name,
+        url: h.url,
+        region: h.region,
+      })),
+    };
+  } catch (e) {
+    console.warn("[find_areas.wtaFallback] failed:", (e as Error).message);
+    return null;
+  }
+}
 
 interface AreaSummary {
   id: string;
@@ -35,13 +90,12 @@ function summarize(area: Area, match_reason?: string): AreaSummary {
   };
 }
 
-export function registerFindAreasTools(server: McpServer, _env: Env): void {
-  void _env;
+export function registerFindAreasTools(server: McpServer, env: Env): void {
   titledTool(
     server,
     "find_areas",
     "Finding wilderness areas…",
-    "Resolve free-text area queries to canonical area records from the curated PNW registry (currently 12 hand-curated areas: Enchantments, Mt Rainier, North Cascades NP, Olympic NP, Glacier Peak Wilderness, Pasayten, Alpine Lakes Wilderness, Henry M. Jackson Wilderness, Goat Rocks, Mt St Helens, Mt Adams, Mt Baker). Returns area IDs that all other tools accept as `area_id`. This is the right first call for any vague PNW query like \"somewhere in the North Cascades\" or when you're not sure of the canonical area name. For areas outside the registry the response is empty — fall back to `web_research` for the trip details and use `get_weather` with explicit lat/lon. Match types: \"Exact name/alias match\" (high confidence), \"Substring/partial match\" (medium confidence — verify the resolved area is what the user actually meant before relying on it). If the resolved area looks wrong given the user's full query, surface that to the user and re-query with a more distinctive term.",
+    "Resolve free-text area queries to canonical area records from the curated PNW registry (currently 12 hand-curated areas: Enchantments, Mt Rainier, North Cascades NP, Olympic NP, Glacier Peak Wilderness, Pasayten, Alpine Lakes Wilderness, Henry M. Jackson Wilderness, Goat Rocks, Mt St Helens, Mt Adams, Mt Baker). Returns area IDs that all other tools accept as `area_id`. This is the right first call for any vague PNW query like \"somewhere in the North Cascades\" or when you're not sure of the canonical area name. Registry matches always take precedence. When the registry has NO match for a named query, the tool attempts a WTA hiking-guide fallback and, on success, returns a `wta_fallback` record (name, trailhead lat/lon, mileage, elevation gain, highest point, WTA URL) at medium-or-lower confidence. Fallback records have NO `area_id` — call downstream tools (get_weather, get_conditions, get_route_info, profile tools) with the record's lat/lon instead. If the WTA lookup also fails, fall back to `web_research`. Match types: \"Exact name/alias match\" (high confidence), \"Substring/partial match\" (medium confidence — verify the resolved area is what the user actually meant before relying on it). If the resolved area looks wrong given the user's full query, surface that to the user and re-query with a more distinctive term.",
     {
       query: z
         .string()
@@ -114,7 +168,7 @@ export function registerFindAreasTools(server: McpServer, _env: Env): void {
         summarize(area, match_reason),
       );
 
-      const sources = [
+      const sources: Source[] = [
         makeSource(
           "https://github.com/tusensii/mcp-stack/blob/main/apps/trip-mcp/src/areas.ts",
           "trip-mcp canonical PNW areas registry (hand-curated)",
@@ -123,10 +177,31 @@ export function registerFindAreasTools(server: McpServer, _env: Env): void {
       ];
 
       const caveats: string[] = [];
-      if (results.length === 0) {
+
+      // Off-registry fallback: only when a named query resolved to nothing
+      // in the registry (filter-driven empties are answers, not misses).
+      let fallback: WtaFallbackRecord | null = null;
+      if (args.query && pool.length === 0) {
+        fallback = await wtaFallback(env, args.query);
+        if (fallback) {
+          sources.push(
+            makeSource(fallback.wta_url, "Washington Trails Association hiking guide", {
+              license: "Washington Trails Association — content used with attribution",
+              confidence: "medium",
+              fetched_at: nowIso(),
+            }),
+          );
+          caveats.push(
+            "Result is a WTA hiking-guide fallback (scraped, medium confidence at best), not a registry area. " +
+              "It has no area_id — pass its lat/lon to downstream tools. Verify it matches the intended trail via the wta_url.",
+          );
+        }
+      }
+
+      if (results.length === 0 && !fallback) {
         caveats.push(
-          "No areas matched. The registry covers ~12 high-value PNW destinations. " +
-            "For obscure routes, call `web_research` directly.",
+          "No areas matched. The registry covers ~12 high-value PNW destinations, and the " +
+            "WTA hiking-guide fallback found nothing usable. For obscure routes, call `web_research` directly.",
         );
       }
       if (matchKind === "partial") {
@@ -144,12 +219,23 @@ export function registerFindAreasTools(server: McpServer, _env: Env): void {
 
       const confidence: "high" | "medium" | "low" =
         results.length === 0
-          ? "low"
+          ? fallback
+            ? "medium"
+            : "low"
           : matchKind === "id" || matchKind === "exact"
             ? "high"
             : "medium";
       return payloadResponse(
-        ok({ results, total_in_registry: AREAS.length }, sources, confidence, caveats),
+        ok(
+          {
+            results,
+            total_in_registry: AREAS.length,
+            ...(fallback ? { wta_fallback: fallback } : {}),
+          },
+          sources,
+          confidence,
+          caveats,
+        ),
       );
     },
   );
