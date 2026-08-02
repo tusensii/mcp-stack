@@ -1,18 +1,20 @@
 # trip-mcp
 
 PNW backpacking & camping research MCP server. Single Cloudflare Worker exposing
-10 outcome-oriented tools that aggregate Recreation.gov, NWS, NPS, USFS, WSDOT,
-WFIGS, InciWeb, WTA, OSM, and USGS data.
+12 outcome-oriented tools that aggregate Recreation.gov, NWS, NPS, USFS, WSDOT,
+WFIGS, InciWeb, WTA, OSM, USGS, and Open-Meteo data.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
 | `research_trip` | Top-level orchestrator. Fans out to all sources in parallel and returns a synthesized brief plus `suggested_followups`. |
-| `find_areas` | Resolves a free-text query to canonical PNW area records. |
+| `find_areas` | Resolves a free-text query to canonical PNW area records; WTA hiking-guide fallback for off-registry WA trails. |
 | `get_permits` | All permit options for an area (Rec.gov + self-issued). |
 | `check_availability` | Live RIDB availability for a permit/campground + date range. |
-| `get_weather` | NWS daily/hourly forecast + active alerts + AFD. |
+| `get_weather` | NWS daily/hourly forecast + active alerts + AFD; optional Open-Meteo elevation-adjusted block. |
+| `get_elevation_profile` | Distance-indexed elevation series along a trail polyline (points, OSM id, or trail name). |
+| `get_trail_weather_profile` | Chart-ready {mile, elevation, temp, precip} series along a trail. |
 | `get_trip_reports` | Recent WTA trip reports for an area or trail. |
 | `get_conditions` | Combined NPS + USFS + WSDOT + WFIGS + InciWeb. |
 | `get_route_info` | OSM trails/trailheads/water + USGS elevation. |

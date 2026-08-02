@@ -21,6 +21,10 @@ export type Bbox = [number, number, number, number];
 export interface OsmTrail {
   id: string;
   name: string;
+  /** USFS trail number when tagged (`ref`, e.g. "724"). */
+  ref?: string;
+  /** Other OSM naming tags: alt_name, loc_name, official_name. */
+  alt_names?: string[];
   surface: string;
   length_m_estimate: number;
 }
@@ -154,25 +158,49 @@ function refNumberFromQuery(q: string): string | null {
 }
 
 /**
- * Case-insensitive trail-name match across OSM naming tags, not just
- * `name`: alt_name, loc_name, official_name, and the USFS trail number
- * in `ref` (which may be "724", "#724", or a semicolon list). Popular
- * names often differ from OSM's — "Gothic Basin" is OSM's "Weden Creek
- * Trail" (USFS #724) — so single-field matching misses real trails.
+ * Case-insensitive trail-name match across a set of candidate names and
+ * an optional USFS trail number (`ref`, which may be "724", "#724", or a
+ * semicolon list). Popular names often differ from OSM's — "Gothic
+ * Basin" is OSM's "Weden Creek Trail" (USFS #724) — so single-field
+ * matching misses real trails.
  */
-export function trailMatchesQuery(tags: Record<string, string> | undefined, query: string): boolean {
+export function namesMatchQuery(
+  names: Array<string | undefined>,
+  ref: string | undefined,
+  query: string,
+): boolean {
   const q = query.toLowerCase().trim();
   if (!q) return true;
-  if (!tags) return false;
-  for (const field of [tags.name, tags.alt_name, tags.loc_name, tags.official_name]) {
+  const wanted = refNumberFromQuery(q);
+  if (wanted) {
+    // Numeric-style query ("724", "Trail 724", "#724"): whole-number
+    // matches only, so "72" can't hit the "#724" inside a name.
+    if (ref) {
+      const refs = ref.split(/[;,]/).map((r) => r.trim().replace(/^(?:trail\s*)?#?/i, ""));
+      if (refs.includes(wanted)) return true;
+    }
+    const numRe = new RegExp(`(^|[^\\d.])${wanted.replace(".", "\\.")}([^\\d.]|$)`);
+    return names.some((field) => field !== undefined && numRe.test(field));
+  }
+  for (const field of names) {
     if (field && field.toLowerCase().includes(q)) return true;
   }
-  const wanted = refNumberFromQuery(q);
-  if (wanted && tags.ref) {
-    const refs = tags.ref.split(/[;,]/).map((r) => r.trim().replace(/^(?:trail\s*)?#?/i, ""));
-    if (refs.includes(wanted)) return true;
-  }
   return false;
+}
+
+/** namesMatchQuery over raw OSM tags (name, alt_name, loc_name, official_name, ref). */
+export function trailMatchesQuery(tags: Record<string, string> | undefined, query: string): boolean {
+  if (!tags) return !query.trim();
+  return namesMatchQuery(
+    [tags.name, tags.alt_name, tags.loc_name, tags.official_name],
+    tags.ref,
+    query,
+  );
+}
+
+/** namesMatchQuery over a mapped OsmTrail record. */
+export function osmTrailMatchesQuery(trail: OsmTrail, query: string): boolean {
+  return namesMatchQuery([trail.name, ...(trail.alt_names ?? [])], trail.ref, query);
 }
 
 // --- Public API ----------------------------------------------------------
@@ -278,12 +306,20 @@ export async function findTrails(env: Env, bbox: Bbox): Promise<OsmTrail[]> {
       `);` +
       `out tags geom;`;
     const elements = await runOverpass(env, query);
-    return elements.map((el) => ({
-      id: `${el.type}/${el.id}`,
-      name: el.tags?.name ?? el.tags?.ref ?? "",
-      surface: el.tags?.surface ?? el.tags?.["trail_visibility"] ?? "",
-      length_m_estimate: geomLengthM(el.geometry),
-    }));
+    return elements.map((el) => {
+      const trail: OsmTrail = {
+        id: `${el.type}/${el.id}`,
+        name: el.tags?.name ?? el.tags?.ref ?? "",
+        surface: el.tags?.surface ?? el.tags?.["trail_visibility"] ?? "",
+        length_m_estimate: geomLengthM(el.geometry),
+      };
+      if (el.tags?.ref) trail.ref = el.tags.ref;
+      const altNames = [el.tags?.alt_name, el.tags?.loc_name, el.tags?.official_name].filter(
+        (n): n is string => Boolean(n),
+      );
+      if (altNames.length > 0) trail.alt_names = altNames;
+      return trail;
+    });
   });
 }
 

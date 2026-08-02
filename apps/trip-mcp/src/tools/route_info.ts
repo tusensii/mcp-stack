@@ -9,11 +9,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Confidence, Env, Source, ToolPayload } from "../types.js";
 import { empty, makeSource, ok } from "../types.js";
-import { findAreaById } from "../areas.js";
+import { expandTrailAliases, findAreaById } from "../areas.js";
 import {
   findTrails,
   findTrailheads,
   findWaterSources,
+  osmTrailMatchesQuery,
   type Bbox,
   type OsmTrail,
   type OsmTrailhead,
@@ -39,7 +40,7 @@ interface RouteInfoData {
 
 const STANDARD_CAVEATS = [
   "Trail data sourced from OpenStreetMap; verify with current trail map before trip.",
-  "Elevation profile not computed — request lat/lon polyline for full profile.",
+  "Only centroid elevation computed here — call get_elevation_profile (points, osm_id, or trail_name) for a distance-indexed profile.",
 ];
 
 /** Earth radius in km for crude lat/lon ↔ km conversion. */
@@ -77,7 +78,7 @@ export function registerRouteInfoTools(server: McpServer, env: Env): void {
     server,
     "get_route_info",
     "Reviewing route details…",
-    "Returns trailheads, trails, water sources, and centroid elevation around a PNW area or arbitrary point. Pulls from OpenStreetMap (trails, parking, springs, streams, rivers) and USGS 3DEP (elevation). Trails are trimmed to the longest 10 by estimated length. Returns both `water_sources_within_500m` (strict — for \"is there water near camp\") and `water_sources_in_area` (radius-wide — for \"what water do I cross on this trail\"). Use this for first-pass route scouting; ALWAYS verify with a real trail map (Green Trails, USGS quad, or CalTopo) before the trip — OSM trail data has gaps and labels can be wrong. If you already have an `area_id` from `find_areas` or a prior tool call, pass it directly to avoid re-resolution. USGS elevation is sometimes flaky; if `centroid_elevation_ft` is null the source is omitted from citations and a caveat is added — surface the missing elevation to the user rather than inventing one.",
+    "Returns trailheads, trails, water sources, and centroid elevation around a PNW area or arbitrary point. Pulls from OpenStreetMap (trails, parking, springs, streams, rivers) and USGS 3DEP (elevation). Trails are trimmed to the longest 10 by estimated length. `trail_name` matches case-insensitively against OSM name, alt_name, loc_name, official_name, AND the USFS trail number in `ref` — so \"724\" or \"Trail 724\" finds Weden Creek Trail #724, and seeded popular-name aliases (e.g. \"Gothic Basin\" → Weden Creek) are expanded automatically. If the name filter matches nothing but trails exist in the radius, the UNFILTERED trail list is returned with an explanatory caveat instead of an empty array — check caveats before concluding \"no trails here\". Returns both `water_sources_within_500m` (strict — for \"is there water near camp\") and `water_sources_in_area` (radius-wide — for \"what water do I cross on this trail\"). Use this for first-pass route scouting; ALWAYS verify with a real trail map (Green Trails, USGS quad, or CalTopo) before the trip — OSM trail data has gaps and labels can be wrong. If you already have an `area_id` from `find_areas` or a prior tool call, pass it directly to avoid re-resolution. USGS elevation is sometimes flaky; if `centroid_elevation_ft` is null the source is omitted from citations and a caveat is added — surface the missing elevation to the user rather than inventing one.",
     {
       area_id: z.string().optional().describe("Known PNW area id (e.g. 'enchantments'). Overrides lat/lon."),
       lat: z.number().min(-90).max(90).optional().describe("Latitude (decimal). Required if area_id absent."),
@@ -91,7 +92,9 @@ export function registerRouteInfoTools(server: McpServer, env: Env): void {
       trail_name: z
         .string()
         .optional()
-        .describe("Optional trail-name substring filter (case-insensitive)."),
+        .describe(
+          "Optional trail filter (case-insensitive). Matches OSM name/alt_name/loc_name/official_name substrings and USFS trail numbers ('724', 'Trail 724'). Zero matches fall back to the unfiltered nearby list with a caveat.",
+        ),
     },
     async ({ area_id, lat, lon, radius_km, trail_name }) => {
       let resolvedLat: number | undefined = lat;
@@ -139,8 +142,24 @@ export function registerRouteInfoTools(server: McpServer, env: Env): void {
 
       let trails: OsmTrail[] = trailsResult ?? [];
       if (trail_name) {
-        const needle = trail_name.toLowerCase();
-        trails = trails.filter((t) => t.name.toLowerCase().includes(needle));
+        // Match across OSM name/alt_name/loc_name/official_name and USFS
+        // trail number (ref), expanding seeded popular-name aliases
+        // ("Gothic Basin" → "weden creek"). An empty match against a
+        // non-empty trail list falls back to the unfiltered list with a
+        // caveat — an empty array reads as "no trails here", which is
+        // factually wrong when the name simply didn't match.
+        const queries = [trail_name, ...expandTrailAliases(trail_name)];
+        const matched = trails.filter((t) => queries.some((q) => osmTrailMatchesQuery(t, q)));
+        if (matched.length === 0 && trails.length > 0) {
+          caveats.push(
+            `No trail matched "${trail_name}" by name, alt name, or USFS trail number; ` +
+              `nearby trails listed UNFILTERED — verify names. Popular names often differ ` +
+              `from OSM's (e.g. Gothic Basin is "Weden Creek Trail" #724); try the USFS ` +
+              `trail number if you know it.`,
+          );
+        } else {
+          trails = matched;
+        }
       }
       // Trim to top 10 by length.
       trails = [...trails]
