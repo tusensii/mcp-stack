@@ -9,6 +9,7 @@ import { registerRouteInfoTools } from "./route_info.js";
 import { registerElevationProfileTools } from "./elevation_profile.js";
 import { registerTrailWeatherProfileTools } from "./trail_weather_profile.js";
 import { registerRiverConditionsTools } from "./river_conditions.js";
+import { registerAvalancheTools } from "./avalanche.js";
 import { registerSafetyTools } from "./safety.js";
 import { registerWebResearchTools } from "./web_research.js";
 import { registerResearchTripTool } from "./research_trip.js";
@@ -23,6 +24,7 @@ export function registerAllTools(server: McpServer, env: Env): void {
   registerElevationProfileTools(server, env);
   registerTrailWeatherProfileTools(server, env);
   registerRiverConditionsTools(server, env);
+  registerAvalancheTools(server, env);
   registerSafetyTools(server, env);
   registerWebResearchTools(server, env);
   registerResearchTripTool(server, env);
