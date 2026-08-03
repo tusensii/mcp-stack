@@ -1,8 +1,10 @@
 # trip-mcp
 
 PNW backpacking & camping research MCP server. Single Cloudflare Worker exposing
-12 outcome-oriented tools that aggregate Recreation.gov, NWS, NPS, USFS, WSDOT,
-WFIGS, InciWeb, WTA, OSM, USGS, and Open-Meteo data.
+19 outcome-oriented tools that aggregate Recreation.gov, NWS, NPS, USFS, WSDOT,
+WFIGS, InciWeb, WTA, OSM, USGS, NWAC, OSRM, and Open-Meteo data plus a
+hand-curated PNW registry (areas, crossings, seasonal windows, approach
+logistics, permit strategy, camping rules, access roads).
 
 ## Tools
 
@@ -15,7 +17,14 @@ WFIGS, InciWeb, WTA, OSM, USGS, and Open-Meteo data.
 | `get_weather` | NWS daily/hourly forecast + active alerts + AFD; optional Open-Meteo elevation-adjusted block. |
 | `get_elevation_profile` | Distance-indexed elevation series along a trail polyline (points, OSM id, or trail name). |
 | `get_trail_weather_profile` | Chart-ready {mile, elevation, temp, precip} series along a trail. |
-| `get_trip_reports` | Recent WTA trip reports for an area or trail. |
+| `get_trip_reports` | Recent trip reports (WTA + NWHikers/Reddit secondary); optional structured condition extraction. |
+| `get_river_conditions` | USGS gauge discharge + 7-day series + percentile flow context for crossings. |
+| `get_avalanche_forecast` | NWAC zone forecasts with danger by elevation band (off-season aware). |
+| `get_seasonal_timing` | Curated typical-year windows: melt-out, larches, wildflowers, bugs, crowds. |
+| `get_approach_info` | Curated last-gas/gear/supplies, cell coverage, road notes per corridor. |
+| `get_permit_strategy` | Acquisition paths, lottery odds, walk-up beta + live availability probe. |
+| `get_camp_water_beta` | Camp regulations, named sites, water reliability + OSM campsite layer. |
+| `get_access_status` | Per-road access status (WSDOT/NPS/USFS) + drive times (static or OSRM). |
 | `get_conditions` | Combined NPS + USFS + WSDOT + WFIGS + InciWeb. |
 | `get_route_info` | OSM trails/trailheads/water + USGS elevation. |
 | `get_safety_brief` | Curated safety brief: bear canisters, river crossings, ranger stations. |
