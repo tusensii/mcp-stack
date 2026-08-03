@@ -13,6 +13,7 @@ import { registerAvalancheTools } from "./avalanche.js";
 import { registerSeasonalTimingTools } from "./seasonal_timing.js";
 import { registerApproachInfoTools } from "./approach_info.js";
 import { registerPermitStrategyTools } from "./permit_strategy.js";
+import { registerCampWaterTools } from "./camp_water.js";
 import { registerSafetyTools } from "./safety.js";
 import { registerWebResearchTools } from "./web_research.js";
 import { registerResearchTripTool } from "./research_trip.js";
@@ -31,6 +32,7 @@ export function registerAllTools(server: McpServer, env: Env): void {
   registerSeasonalTimingTools(server, env);
   registerApproachInfoTools(server, env);
   registerPermitStrategyTools(server, env);
+  registerCampWaterTools(server, env);
   registerSafetyTools(server, env);
   registerWebResearchTools(server, env);
   registerResearchTripTool(server, env);

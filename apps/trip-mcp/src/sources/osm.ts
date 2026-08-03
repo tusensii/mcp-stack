@@ -460,6 +460,49 @@ export async function findTrailheads(env: Env, bbox: Bbox): Promise<OsmTrailhead
   });
 }
 
+export interface OsmCampsite {
+  id: string;
+  lat: number;
+  lon: number;
+  name?: string;
+  kind: "camp_site" | "camp_pitch";
+  backcountry: boolean;
+}
+
+/** Mapped camp sites/pitches in a bbox — incomplete and unofficial by nature. */
+export async function findCampsites(env: Env, bbox: Bbox): Promise<OsmCampsite[]> {
+  const key = `osm:camps:${bboxKey(bbox)}`;
+  return cached(env, key, TTL.OSM, async () => {
+    const swne = bboxAsSwne(bbox);
+    const query =
+      `[out:json][timeout:25];` +
+      `(` +
+      `node["tourism"="camp_site"](${swne});` +
+      `way["tourism"="camp_site"](${swne});` +
+      `node["tourism"="camp_pitch"](${swne});` +
+      `way["tourism"="camp_pitch"](${swne});` +
+      `);` +
+      `out tags center;`;
+    const elements = await runOverpass(env, query);
+    return elements
+      .map((el) => {
+        const lat = el.lat ?? el.center?.lat;
+        const lon = el.lon ?? el.center?.lon;
+        if (typeof lat !== "number" || typeof lon !== "number") return null;
+        const site: OsmCampsite = {
+          id: `${el.type}/${el.id}`,
+          lat,
+          lon,
+          kind: el.tags?.tourism === "camp_pitch" ? "camp_pitch" : "camp_site",
+          backcountry: el.tags?.backcountry === "yes",
+        };
+        if (el.tags?.name) site.name = el.tags.name;
+        return site;
+      })
+      .filter((s): s is OsmCampsite => s !== null);
+  });
+}
+
 export async function findWaterSources(env: Env, bbox: Bbox): Promise<OsmWaterSource[]> {
   const key = `osm:water:${bboxKey(bbox)}`;
   return cached(env, key, TTL.OSM, async () => {
