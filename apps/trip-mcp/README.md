@@ -45,6 +45,11 @@ URL pattern: `https://trip-mcp.<sub>.workers.dev/s/<MCP_PATH_SECRET>/mcp`
 
 Add as a custom connector in claude.ai → Settings → Connectors → Add custom connector.
 
+## Design
+
+Cross-cutting principles (PNW-only depth, impersonal, chart-ready
+series, à la carte tools) live in [DESIGN.md](./DESIGN.md).
+
 ## Architecture
 
 - `src/index.ts` — Worker entry, delegates to `@mcp-stack/mcp-core/worker`.
