@@ -11,6 +11,7 @@
 import { createFetchClient } from "@mcp-stack/http-fetch";
 import type { Env } from "../types.js";
 import { cached, TTL } from "../cache.js";
+import { chainSegments } from "../polyline.js";
 import { roundCoord, userAgent } from "../tools/utils.js";
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
@@ -205,38 +206,70 @@ export function osmTrailMatchesQuery(trail: OsmTrail, query: string): boolean {
 
 // --- Public API ----------------------------------------------------------
 
+export interface OsmGeometryAssembly {
+  /** Ways/segments incorporated into the returned line. */
+  segments_used: number;
+  /** Gap sizes (m) straight-line bridged between segments. */
+  bridged_gaps_m: number[];
+  /** Name-matching segments that could not be connected. */
+  leftover_segments: number;
+  /** Chain stopped at the 30 mi length cap. */
+  capped: boolean;
+  /** "relation" when assembled from a route relation, else "ways". */
+  assembled_from: "relation" | "ways" | "single_way";
+}
+
 export interface OsmGeometry {
   /** e.g. "way/123" or "relation/456" */
   id: string;
   name: string;
   ref?: string;
   points: Array<{ lat: number; lon: number }>;
+  /** Present when the line was assembled from multiple segments. */
+  assembly?: OsmGeometryAssembly;
+}
+
+function memberSegments(el: OverpassElement): Array<Array<{ lat: number; lon: number }>> {
+  return (el.members ?? [])
+    .filter((m) => m.type === "way" && m.geometry && m.geometry.length >= 2)
+    .map((m) => m.geometry!);
 }
 
 /**
  * Fetch the polyline geometry of one OSM element. Accepts "way/123",
- * "relation/456", or a bare numeric id (assumed way). For relations,
- * member-way geometries are concatenated in member order — OSM does not
- * guarantee ordering, so treat relation output as approximate.
+ * "relation/456", or a bare numeric id (assumed way). Relation member
+ * ways are chained by endpoint proximity (OSM does not guarantee member
+ * order); the assembly block reports segment count and bridged gaps.
  */
 export async function getOsmGeometry(env: Env, osmId: string): Promise<OsmGeometry | null> {
   const m = osmId.trim().match(/^(?:(way|relation)\/)?(\d+)$/i);
   if (!m) return null;
   const type = (m[1] ?? "way").toLowerCase();
   const id = m[2]!;
-  const key = `osm:geom:${type}/${id}`;
+  const key = `osm:geom:v2:${type}/${id}`;
   return cached(env, key, TTL.OSM, async () => {
     const query = `[out:json][timeout:25];${type}(${id});out tags geom;`;
     const elements = await runOverpass(env, query);
     const el = elements[0];
     if (!el) return null;
-    const points: Array<{ lat: number; lon: number }> = [];
+
+    let points: Array<{ lat: number; lon: number }> = [];
+    let assembly: OsmGeometryAssembly | undefined;
     if (el.geometry && el.geometry.length > 0) {
-      points.push(...el.geometry);
-    } else if (el.members) {
-      for (const member of el.members) {
-        if (member.type === "way" && member.geometry) points.push(...member.geometry);
-      }
+      points = el.geometry;
+      assembly = undefined;
+    } else {
+      const segs = memberSegments(el);
+      if (segs.length === 0) return null;
+      const chained = chainSegments(segs, segs[0]![0]!);
+      points = chained.points;
+      assembly = {
+        segments_used: chained.segments_used,
+        bridged_gaps_m: chained.bridged_gaps_m,
+        leftover_segments: chained.leftover_segments,
+        capped: chained.capped,
+        assembled_from: "relation",
+      };
     }
     if (points.length === 0) return null;
     const result: OsmGeometry = {
@@ -244,52 +277,115 @@ export async function getOsmGeometry(env: Env, osmId: string): Promise<OsmGeomet
       name: el.tags?.name ?? el.tags?.ref ?? "",
       points,
     };
+    if (assembly) result.assembly = assembly;
     if (el.tags?.ref) result.ref = el.tags.ref;
     return result;
   });
 }
 
 /**
- * Find the trail near a point whose naming tags match `query` and return
- * the longest matching way's geometry. Used by the profile tools to turn
- * "trail_name + lat/lon hint" into a polyline.
+ * Resolve `trail_name` near a point to a full assembled polyline.
+ *
+ * Relation-first: a matching `route=hiking|foot` relation is the
+ * canonical multi-way representation — among matching relations the
+ * SHORTEST complete one wins (guards against super-relations like the
+ * PCT swallowing a local trail name). Otherwise ALL matching ways are
+ * chained end-to-end by endpoint proximity, ordered from the endpoint
+ * nearest the caller's lat/lon hint, with small gaps (<50 m) bridged
+ * and recorded. Single-way matches behave as before.
  */
 export async function findTrailGeometryByName(
   env: Env,
   bbox: Bbox,
   query: string,
+  hint?: { lat: number; lon: number },
 ): Promise<OsmGeometry | null> {
-  const key = `osm:trailgeom:${bboxKey(bbox)}:${query.toLowerCase().trim()}`;
+  const key = `osm:trailgeom:v3:${bboxKey(bbox)}:${query.toLowerCase().trim()}`;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     const q =
       `[out:json][timeout:25];` +
       `(` +
       `way["highway"~"path|footway|track"]["foot"!~"no"](${swne});` +
-      `relation["route"="hiking"](${swne});` +
+      `relation["route"~"hiking|foot"](${swne});` +
       `);` +
       `out tags geom;`;
     const elements = await runOverpass(env, q);
-    let best: OverpassElement | null = null;
-    let bestLen = 0;
-    for (const el of elements) {
-      if (!trailMatchesQuery(el.tags, query)) continue;
-      const geom =
-        el.geometry ??
-        el.members?.flatMap((mem) => (mem.type === "way" && mem.geometry ? mem.geometry : []));
-      const len = geomLengthM(geom);
-      if (geom && geom.length > 1 && len > bestLen) {
-        best = { ...el, geometry: geom };
-        bestLen = len;
+    const start = hint ?? {
+      lat: (bbox[1] + bbox[3]) / 2,
+      lon: (bbox[0] + bbox[2]) / 2,
+    };
+
+    // Relation-first: shortest complete matching relation.
+    const relations = elements.filter(
+      (el) => el.type === "relation" && trailMatchesQuery(el.tags, query),
+    );
+    let bestRel: { el: OverpassElement; segs: Array<Array<{ lat: number; lon: number }>>; len: number } | null =
+      null;
+    for (const el of relations) {
+      const segs = memberSegments(el);
+      if (segs.length === 0) continue;
+      const len = segs.reduce((sum, s) => sum + geomLengthM(s), 0);
+      if (!bestRel || len < bestRel.len) bestRel = { el, segs, len };
+    }
+    if (bestRel) {
+      const chained = chainSegments(bestRel.segs, start);
+      if (chained.points.length >= 2) {
+        const result: OsmGeometry = {
+          id: `relation/${bestRel.el.id}`,
+          name: bestRel.el.tags?.name ?? bestRel.el.tags?.ref ?? "",
+          points: chained.points,
+          assembly: {
+            segments_used: chained.segments_used,
+            bridged_gaps_m: chained.bridged_gaps_m,
+            leftover_segments: chained.leftover_segments,
+            capped: chained.capped,
+            assembled_from: "relation",
+          },
+        };
+        if (bestRel.el.tags?.ref) result.ref = bestRel.el.tags.ref;
+        return result;
       }
     }
-    if (!best || !best.geometry) return null;
+
+    // Way-chaining: assemble ALL matching ways.
+    const ways = elements.filter(
+      (el) =>
+        el.type === "way" &&
+        trailMatchesQuery(el.tags, query) &&
+        el.geometry &&
+        el.geometry.length >= 2,
+    );
+    if (ways.length === 0) return null;
+    const chained = chainSegments(
+      ways.map((w) => w.geometry!),
+      start,
+    );
+    if (chained.points.length < 2) return null;
+
+    // Attribute the result to the longest contributing way for id/name.
+    let primary = ways[0]!;
+    let primaryLen = 0;
+    for (const w of ways) {
+      const len = geomLengthM(w.geometry);
+      if (len > primaryLen) {
+        primary = w;
+        primaryLen = len;
+      }
+    }
     const result: OsmGeometry = {
-      id: `${best.type}/${best.id}`,
-      name: best.tags?.name ?? best.tags?.ref ?? "",
-      points: best.geometry,
+      id: `way/${primary.id}`,
+      name: primary.tags?.name ?? primary.tags?.ref ?? "",
+      points: chained.points,
+      assembly: {
+        segments_used: chained.segments_used,
+        bridged_gaps_m: chained.bridged_gaps_m,
+        leftover_segments: chained.leftover_segments,
+        capped: chained.capped,
+        assembled_from: chained.segments_used > 1 ? "ways" : "single_way",
+      },
     };
-    if (best.tags?.ref) result.ref = best.tags.ref;
+    if (primary.tags?.ref) result.ref = primary.tags.ref;
     return result;
   });
 }

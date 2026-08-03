@@ -10,8 +10,35 @@
 
 import { z } from "zod";
 import type { Env } from "../types.js";
-import { findTrailGeometryByName, getOsmGeometry } from "../sources/osm.js";
+import {
+  findTrailGeometryByName,
+  getOsmGeometry,
+  type OsmGeometryAssembly,
+} from "../sources/osm.js";
 import { bboxAroundPoint, type PolyPoint } from "../polyline.js";
+
+/** Caveats distinguishing clean chains, bridged gaps, and truncation. */
+function assemblyCaveats(assembly: OsmGeometryAssembly | undefined): string[] {
+  if (!assembly || assembly.segments_used <= 1) return [];
+  const out: string[] = [];
+  const from = assembly.assembled_from === "relation" ? "route relation members" : "connected OSM ways";
+  if (assembly.bridged_gaps_m.length === 0) {
+    out.push(`Full chain assembled from ${assembly.segments_used} ${from}.`);
+  } else {
+    out.push(
+      `Chain assembled from ${assembly.segments_used} ${from} with ${assembly.bridged_gaps_m.length} bridged gap(s) (max ${Math.max(...assembly.bridged_gaps_m)} m straight-line) — mileage across gaps is approximate.`,
+    );
+  }
+  if (assembly.leftover_segments > 0) {
+    out.push(
+      `${assembly.leftover_segments} name-matching segment(s) could not be connected to the chain (disjoint or >50 m away) and were excluded.`,
+    );
+  }
+  if (assembly.capped) {
+    out.push("Chain stopped at the 30 mi assembly cap — the matched route continues beyond it.");
+  }
+  return out;
+}
 
 export const profileInputSchema = {
   points: z
@@ -90,9 +117,7 @@ export async function resolvePolyline(
       points: geom.points,
       resolved_from: "osm_id",
       osm_id: geom.id,
-      caveats: geom.id.startsWith("relation/")
-        ? ["Relation geometry concatenated in member order; OSM does not guarantee ordering — mileage may be off if members are unsorted."]
-        : [],
+      caveats: assemblyCaveats(geom.assembly),
     };
     if (geom.name) out.matched_name = geom.name;
     return out;
@@ -103,7 +128,10 @@ export async function resolvePolyline(
       return { error: "trail_name resolution requires both lat and lon as a location hint." };
     }
     const bbox = bboxAroundPoint(args.lat, args.lon, args.radius_km);
-    const geom = await findTrailGeometryByName(env, bbox, args.trail_name);
+    const geom = await findTrailGeometryByName(env, bbox, args.trail_name, {
+      lat: args.lat,
+      lon: args.lon,
+    });
     if (!geom) {
       return {
         error:
@@ -116,7 +144,8 @@ export async function resolvePolyline(
       resolved_from: "trail_name",
       osm_id: geom.id,
       caveats: [
-        "Trail resolved to the single longest matching OSM way — long trails split across several ways may be truncated; pass osm_id or points for the full line.",
+        ...assemblyCaveats(geom.assembly),
+        "Full mapped line assembled from OSM — OSM coverage may end before the on-the-ground destination (upper-basin routes are often unmapped user tracks).",
       ],
     };
     if (geom.name) out.matched_name = geom.name;
