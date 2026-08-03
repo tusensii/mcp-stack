@@ -422,3 +422,27 @@ export function findAreaWithMatch(text: string): AreaMatch | undefined {
 export function findAreaById(id: string): Area | undefined {
   return AREAS.find((a) => a.id === id);
 }
+
+/**
+ * Popular-name → OSM/official-name aliases for high-traffic mismatches
+ * where the name everyone uses isn't what OSM tags the trail. Purely an
+ * internal seed for trail-name matching (NOT user-facing, NOT the area
+ * registry) — extend as new cases are found in the wild.
+ */
+export const TRAIL_NAME_ALIASES: Record<string, string> = {
+  // "Gothic Basin" is OSM's "Weden Creek Trail", USFS #724.
+  "gothic basin": "weden creek",
+};
+
+/**
+ * Expand a trail-name query with any seeded aliases whose key appears in
+ * it. Returns extra query strings to try alongside the original.
+ */
+export function expandTrailAliases(query: string): string[] {
+  const q = query.toLowerCase();
+  const out: string[] = [];
+  for (const [popular, osmName] of Object.entries(TRAIL_NAME_ALIASES)) {
+    if (q.includes(popular)) out.push(osmName);
+  }
+  return out;
+}

@@ -50,19 +50,26 @@ function client(env: Env) {
 export async function getMountainPassConditions(env: Env): Promise<MountainPassCondition[]> {
   const key = "wsdot:passes";
   return cached(env, key, TTL.WSDOT_PASS, async () => {
+    if (!env.WSDOT_API_KEY) {
+      throw new Error(
+        "missing WSDOT_API_KEY secret — get a free access code at wsdot.wa.gov/traffic/api/ and `wrangler secret put WSDOT_API_KEY`",
+      );
+    }
     const c = client(env);
     const url = `${ENDPOINT}?AccessCode=${encodeURIComponent(env.WSDOT_API_KEY)}`;
     // Probe raw first so we can log diagnostics on auth/format failures.
     const rawRes = await c.fetch(url);
     const text = await rawRes.text();
     if (!rawRes.ok) {
-      const keyHint = env.WSDOT_API_KEY
-        ? `present(len=${env.WSDOT_API_KEY.length})`
-        : "MISSING";
       console.warn(
-        `WSDOT ${rawRes.status} ${rawRes.statusText} key=${keyHint} ` +
+        `WSDOT ${rawRes.status} ${rawRes.statusText} key=present(len=${env.WSDOT_API_KEY.length}) ` +
           `body[0:300]=${text.slice(0, 300).replace(/\s+/g, " ")}`,
       );
+      if (rawRes.status === 401) {
+        throw new Error(
+          "wsdot_http_401 — AccessCode rejected; the WSDOT_API_KEY secret is likely expired or rotated. Re-issue at wsdot.wa.gov/traffic/api/ and `wrangler secret put WSDOT_API_KEY`",
+        );
+      }
       throw new Error(`wsdot_http_${rawRes.status}`);
     }
     let res: RawPassCondition[];

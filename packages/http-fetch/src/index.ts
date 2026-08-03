@@ -197,7 +197,12 @@ export function createFetchClient(options: FetchClientOptions = {}): FetchClient
 function resolveUrl(url: string, baseUrl?: string): string {
   if (!baseUrl) return url;
   if (/^https?:\/\//i.test(url)) return url;
-  return new URL(url, baseUrl).toString();
+  // Concatenate rather than `new URL(url, baseUrl)`: URL resolution drops
+  // the base's path segment for leading-slash inputs ("/alerts" against
+  // "https://host/api/v1" → "https://host/alerts"), which silently 404s
+  // any API whose base includes a path prefix (NPS, RIDB).
+  const base = baseUrl.replace(/\/+$/, "");
+  return url.startsWith("/") ? base + url : `${base}/${url}`;
 }
 
 function isAbortError(e: unknown): boolean {

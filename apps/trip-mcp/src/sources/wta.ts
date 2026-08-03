@@ -504,6 +504,97 @@ export function parseHikeListing(html: string): HikeSummary[] {
   return out;
 }
 
+/* --------------------------- hike detail ---------------------------- */
+
+export interface HikeDetail {
+  url: string;
+  hike_name: string | null;
+  /** Trailhead coordinates (WTA's GeoCoordinates / trailhead marker). */
+  lat: number | null;
+  lon: number | null;
+  length_miles: number | null;
+  gain_ft: number | null;
+  highest_point_ft: number | null;
+  region: string | null;
+}
+
+export async function getHikeDetail(env: Env, hikeUrl: string): Promise<HikeDetail | null> {
+  const url = absUrl(hikeUrl);
+  const key = `wta:hike:${url}`;
+  return cached(env, key, TTL.WTA_LIST, async () => {
+    try {
+      const res = await rateLimitedFetch(env, url);
+      if (!res.ok) return null;
+      const html = await res.text();
+      return parseHikePage(html, url);
+    } catch (e) {
+      console.warn("[wta.getHikeDetail] failed:", (e as Error).message);
+      return null;
+    }
+  });
+}
+
+/**
+ * Parse a /go-hiking/hikes/SLUG page (probed 2026-08-02):
+ *
+ *   - Coordinates: JSON-LD `"geo": {"@type": "GeoCoordinates",
+ *     "latitude": 48.0261166667, "longitude": -121.4425}`; fallback to
+ *     the inline map payload `"trailhead": [-121.4425, 48.0261166667]`
+ *     (LON-first — GeoJSON ordering).
+ *   - Stats: `<dl class="hike-stats …">` with per-stat
+ *     `<dt>… Length </dt><dd>9.2 miles, roundtrip</dd>`,
+ *     `<dt>… Elevation Gain </dt><dd> 2,840 feet </dd>`,
+ *     `<dt>… Highest Point </dt><dd> 5,200 feet </dd>`.
+ */
+export function parseHikePage(html: string, url: string): HikeDetail {
+  const h1M = html.match(
+    /<h1[^>]*class="[^"]*documentFirstHeading[^"]*"[^>]*>([\s\S]*?)<\/h1>/i,
+  );
+
+  let lat: number | null = null;
+  let lon: number | null = null;
+  const geoM = html.match(
+    /"geo"\s*:\s*\{[^}]*"latitude"\s*:\s*(-?\d+(?:\.\d+)?)\s*,\s*"longitude"\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (geoM) {
+    lat = Number.parseFloat(geoM[1]!);
+    lon = Number.parseFloat(geoM[2]!);
+  } else {
+    // Map payload is [lon, lat] (GeoJSON ordering).
+    const thM = html.match(
+      /"trailhead"\s*:\s*\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/i,
+    );
+    if (thM) {
+      lon = Number.parseFloat(thM[1]!);
+      lat = Number.parseFloat(thM[2]!);
+    }
+  }
+
+  const statValue = (label: string): string | null => {
+    const re = new RegExp(
+      `<dt[^>]*>[\\s\\S]{0,400}?${label}\\s*<\\/dt>\\s*<dd[^>]*>([\\s\\S]*?)<\\/dd>`,
+      "i",
+    );
+    const m = html.match(re);
+    return m ? stripTags(m[1]!) : null;
+  };
+
+  const regionM =
+    html.match(/class="[^"]*hike-region[^"]*"[^>]*>[\s\S]{0,200}?<span[^>]*>([\s\S]*?)<\/span>/i) ??
+    html.match(/class="[^"]*region[^"]*"[^>]*>([\s\S]*?)<\//i);
+
+  return {
+    url,
+    hike_name: h1M ? stripTags(h1M[1]!) : null,
+    lat: Number.isFinite(lat ?? NaN) ? lat : null,
+    lon: Number.isFinite(lon ?? NaN) ? lon : null,
+    length_miles: parseNumber(statValue("Length")),
+    gain_ft: parseNumber(statValue("Elevation\\s+Gain")),
+    highest_point_ft: parseNumber(statValue("Highest\\s+Point")),
+    region: regionM ? stripTags(regionM[1]!) : null,
+  };
+}
+
 function parseNumber(raw: string | undefined | null): number | null {
   if (!raw) return null;
   const m = stripTags(raw).replace(/,/g, "").match(/-?\d+(\.\d+)?/);
