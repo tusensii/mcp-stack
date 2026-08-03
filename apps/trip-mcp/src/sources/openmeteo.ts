@@ -93,6 +93,8 @@ export interface OpenMeteoHourly {
   precip_in: number | null;
   wind_speed_mph: number | null;
   freezing_level_ft: number | null;
+  cloud_cover_pct: number | null;
+  uv_index: number | null;
 }
 
 export interface OpenMeteoForecast {
@@ -119,6 +121,8 @@ interface RawForecastResponse {
     precipitation?: Array<number | null>;
     wind_speed_10m?: Array<number | null>;
     freezing_level_height?: Array<number | null>;
+    cloud_cover?: Array<number | null>;
+    uv_index?: Array<number | null>;
   };
 }
 
@@ -153,7 +157,8 @@ export async function getPointForecast(
     latitude: String(round5(lat)),
     longitude: String(round5(lon)),
     daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum",
-    hourly: "temperature_2m,precipitation_probability,precipitation,wind_speed_10m,freezing_level_height",
+    hourly:
+      "temperature_2m,precipitation_probability,precipitation,wind_speed_10m,freezing_level_height,cloud_cover,uv_index",
     temperature_unit: "fahrenheit",
     wind_speed_unit: "mph",
     precipitation_unit: "inch",
@@ -182,6 +187,8 @@ export async function getPointForecast(
       precip_in: num(res.hourly?.precipitation?.[i]),
       wind_speed_mph: num(res.hourly?.wind_speed_10m?.[i]),
       freezing_level_ft: roundOrNull(toFt(num(res.hourly?.freezing_level_height?.[i]))),
+      cloud_cover_pct: num(res.hourly?.cloud_cover?.[i]),
+      uv_index: num(res.hourly?.uv_index?.[i]),
     }));
 
     const daily: OpenMeteoDaily[] = (res.daily?.time ?? []).map((date, i) => {
