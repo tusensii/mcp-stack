@@ -11,6 +11,7 @@ import { registerTrailWeatherProfileTools } from "./trail_weather_profile.js";
 import { registerRiverConditionsTools } from "./river_conditions.js";
 import { registerAvalancheTools } from "./avalanche.js";
 import { registerSeasonalTimingTools } from "./seasonal_timing.js";
+import { registerApproachInfoTools } from "./approach_info.js";
 import { registerSafetyTools } from "./safety.js";
 import { registerWebResearchTools } from "./web_research.js";
 import { registerResearchTripTool } from "./research_trip.js";
@@ -27,6 +28,7 @@ export function registerAllTools(server: McpServer, env: Env): void {
   registerRiverConditionsTools(server, env);
   registerAvalancheTools(server, env);
   registerSeasonalTimingTools(server, env);
+  registerApproachInfoTools(server, env);
   registerSafetyTools(server, env);
   registerWebResearchTools(server, env);
   registerResearchTripTool(server, env);
