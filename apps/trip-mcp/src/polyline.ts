@@ -79,6 +79,123 @@ export function resamplePolyline(points: PolyPoint[], targetCount: number): Prof
   return out;
 }
 
+/** Result of chaining multiple polyline segments end-to-end. */
+export interface ChainResult {
+  points: PolyPoint[];
+  /** Segments incorporated into the chain. */
+  segments_used: number;
+  /** Gap sizes (meters) that were straight-line bridged (> join tol, <= gap max). */
+  bridged_gaps_m: number[];
+  /** Matching segments that could not be connected to the chain. */
+  leftover_segments: number;
+  /** True when the chain stopped because it hit the length cap. */
+  capped: boolean;
+}
+
+const JOIN_TOLERANCE_M = 30;
+const GAP_BRIDGE_MAX_M = 50;
+/** 30 miles — guard against runaway matches on long-distance routes. */
+const CHAIN_MAX_LENGTH_M = 48_280;
+
+function segLengthM(seg: PolyPoint[]): number {
+  const cum = cumulativeM(seg);
+  return cum[cum.length - 1] ?? 0;
+}
+
+/**
+ * Chain polyline segments (OSM ways) end-to-end into one line. Long
+ * trails are typically split across multiple OSM ways; a profile built
+ * from a single way silently truncates.
+ *
+ * Deterministic: starts from the segment endpoint nearest `start` (the
+ * trailhead hint), then greedily appends the unused segment whose
+ * endpoint is closest to the running chain end — joined seamlessly
+ * within `joinTolM`, or straight-line bridged (recorded per-gap) up to
+ * `gapMaxM`. Stops when nothing is within `gapMaxM` or the length cap
+ * is reached.
+ */
+export function chainSegments(
+  segments: PolyPoint[][],
+  start: PolyPoint,
+  joinTolM = JOIN_TOLERANCE_M,
+  gapMaxM = GAP_BRIDGE_MAX_M,
+  maxTotalM = CHAIN_MAX_LENGTH_M,
+): ChainResult {
+  const usable = segments.filter((s) => s.length >= 2);
+  if (usable.length === 0) {
+    return { points: [], segments_used: 0, bridged_gaps_m: [], leftover_segments: 0, capped: false };
+  }
+
+  // Starting segment: endpoint nearest the hint, oriented away from it.
+  let bestIdx = 0;
+  let bestDist = Infinity;
+  let bestReversed = false;
+  usable.forEach((seg, i) => {
+    const dFirst = haversineM(start, seg[0]!);
+    const dLast = haversineM(start, seg[seg.length - 1]!);
+    if (dFirst < bestDist) {
+      bestDist = dFirst;
+      bestIdx = i;
+      bestReversed = false;
+    }
+    if (dLast < bestDist) {
+      bestDist = dLast;
+      bestIdx = i;
+      bestReversed = true;
+    }
+  });
+
+  const used = new Set<number>([bestIdx]);
+  const first = usable[bestIdx]!;
+  const chain: PolyPoint[] = bestReversed ? [...first].reverse() : [...first];
+  let totalM = segLengthM(chain);
+  const bridged: number[] = [];
+  let capped = false;
+
+  while (totalM < maxTotalM) {
+    const end = chain[chain.length - 1]!;
+    let nextIdx = -1;
+    let nextDist = Infinity;
+    let nextReversed = false;
+    usable.forEach((seg, i) => {
+      if (used.has(i)) return;
+      const dFirst = haversineM(end, seg[0]!);
+      const dLast = haversineM(end, seg[seg.length - 1]!);
+      if (dFirst < nextDist) {
+        nextDist = dFirst;
+        nextIdx = i;
+        nextReversed = false;
+      }
+      if (dLast < nextDist) {
+        nextDist = dLast;
+        nextIdx = i;
+        nextReversed = true;
+      }
+    });
+    if (nextIdx < 0 || nextDist > gapMaxM) break;
+
+    used.add(nextIdx);
+    const seg = usable[nextIdx]!;
+    const oriented = nextReversed ? [...seg].reverse() : [...seg];
+    if (nextDist > joinTolM) bridged.push(Math.round(nextDist));
+    // Drop the duplicate join vertex when seamless.
+    chain.push(...(nextDist <= joinTolM ? oriented.slice(1) : oriented));
+    totalM += segLengthM(oriented) + nextDist;
+    if (totalM >= maxTotalM) {
+      capped = true;
+      break;
+    }
+  }
+
+  return {
+    points: chain,
+    segments_used: used.size,
+    bridged_gaps_m: bridged,
+    leftover_segments: usable.length - used.size,
+    capped,
+  };
+}
+
 /** Bounding box [minLon, minLat, maxLon, maxLat] around a point. */
 export function bboxAroundPoint(
   lat: number,

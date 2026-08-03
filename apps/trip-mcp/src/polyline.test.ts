@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cumulativeM, haversineM, resamplePolyline } from "./polyline.js";
+import { chainSegments, cumulativeM, haversineM, resamplePolyline } from "./polyline.js";
 
 // ~1.1km due-north segment near Barlow Pass.
 const A = { lat: 48.02, lon: -121.44 };
@@ -47,5 +47,57 @@ describe("polyline", () => {
     const out = resamplePolyline([A, A, A], 10);
     expect(out).toHaveLength(3);
     expect(out.every((p) => p.mile === 0)).toBe(true);
+  });
+});
+
+describe("chainSegments", () => {
+  // Three collinear segments heading north, each ~1.1 km, sharing endpoints.
+  const p = (lat: number) => ({ lat, lon: -121.44 });
+  const seg1 = [p(48.0), p(48.01)];
+  const seg2 = [p(48.01), p(48.02)];
+  const seg3 = [p(48.02), p(48.03)];
+
+  it("chains connected segments in order from the hint endpoint", () => {
+    const out = chainSegments([seg2, seg3, seg1], p(48.0));
+    expect(out.segments_used).toBe(3);
+    expect(out.bridged_gaps_m).toEqual([]);
+    expect(out.leftover_segments).toBe(0);
+    expect(out.points[0]!.lat).toBeCloseTo(48.0, 6);
+    expect(out.points[out.points.length - 1]!.lat).toBeCloseTo(48.03, 6);
+  });
+
+  it("reverses segments stored in the opposite direction", () => {
+    const seg2rev = [...seg2].reverse();
+    const out = chainSegments([seg1, seg2rev, seg3], p(48.0));
+    expect(out.segments_used).toBe(3);
+    expect(out.points[out.points.length - 1]!.lat).toBeCloseTo(48.03, 6);
+  });
+
+  it("bridges small gaps and records them; leaves distant segments out", () => {
+    // ~44m gap between seg1 end (48.01) and gapSeg start.
+    const gapSeg = [p(48.0104), p(48.02)];
+    // Far segment ~1.1km away from anything.
+    const farSeg = [p(48.05), p(48.06)];
+    const out = chainSegments([seg1, gapSeg, farSeg], p(48.0));
+    expect(out.segments_used).toBe(2);
+    expect(out.bridged_gaps_m).toHaveLength(1);
+    expect(out.bridged_gaps_m[0]!).toBeGreaterThan(30);
+    expect(out.bridged_gaps_m[0]!).toBeLessThanOrEqual(50);
+    expect(out.leftover_segments).toBe(1);
+  });
+
+  it("caps runaway chains at the max length", () => {
+    // 60 segments x ~1.1km = ~66km > 48.28km cap.
+    const segs = Array.from({ length: 60 }, (_, i) => [p(48 + i * 0.01), p(48 + (i + 1) * 0.01)]);
+    const out = chainSegments(segs, p(48.0));
+    expect(out.capped).toBe(true);
+    expect(out.segments_used).toBeLessThan(60);
+  });
+
+  it("single segment behaves as before", () => {
+    const out = chainSegments([seg1], p(48.0));
+    expect(out.segments_used).toBe(1);
+    expect(out.points).toHaveLength(2);
+    expect(out.leftover_segments).toBe(0);
   });
 });

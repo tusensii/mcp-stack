@@ -25,6 +25,19 @@ export interface RangerStation {
   hours?: string;
 }
 
+/**
+ * Named river crossing (or crossing corridor) mapped to the most
+ * relevant USGS NWIS gauge. Data-only: adding a crossing is a registry
+ * edit, no code change. `note` carries the honest relevance caveat when
+ * the gauge is downstream/distant from the actual crossing.
+ */
+export interface Crossing {
+  name: string;
+  /** USGS NWIS site id, e.g. "12186000". */
+  gauge_site_id: string;
+  note?: string;
+}
+
 export interface Area {
   id: string;
   name: string;
@@ -45,6 +58,8 @@ export interface Area {
   notes?: string;
   /** Forest Service forest slug for alert page scraping. */
   usfs_forest_slug?: string;
+  /** Curated crossing→USGS-gauge mappings for get_river_conditions. */
+  crossings?: Crossing[];
 }
 
 export const AREAS: Area[] = [
@@ -69,6 +84,13 @@ export const AREAS: Area[] = [
       "Advanced lottery Feb 15–Mar 1; results ~Mar 15; unclaimed permits release Apr 1. " +
       "Core Zone <5%, Snow Zone ~15%, Colchuck/Stuart higher. Daily Lottery via geofenced " +
       "mobile app for walk-up permits. Bear canister required.",
+    crossings: [
+      {
+        name: "Icicle Creek (Snow Lakes trailhead / Icicle road corridor)",
+        gauge_site_id: "12458000",
+        note: "Gauge above Snow Creek near Leavenworth — directly on the approach corridor.",
+      },
+    ],
   },
   {
     id: "mt_rainier",
@@ -92,6 +114,13 @@ export const AREAS: Area[] = [
       "Wilderness permit required year-round. Early-Access Lottery Feb 10–Mar 3 (2026); " +
       "general on-sale Apr 25; reservable through Oct 12. 2/3 advance, 1/3 walk-up. " +
       "Wonderland Trail demand outstrips supply.",
+    crossings: [
+      {
+        name: "Nisqually drainage (Longmire side, west Wonderland crossings)",
+        gauge_site_id: "12082500",
+        note: "Gauge near National, below the park — glacial afternoon pulses show here after the fact; cross glacial streams in the morning.",
+      },
+    ],
   },
   {
     id: "north_cascades",
@@ -113,6 +142,18 @@ export const AREAS: Area[] = [
     notes:
       "60% reservable / 40% walk-up. Early-Access Lottery Mar 2–Mar 13 (2026); general " +
       "on-sale Apr 29; reservable through Oct 10. SR 20 typically closed mid-Nov to mid-late April.",
+    crossings: [
+      {
+        name: "Stehekin valley crossings",
+        gauge_site_id: "12451000",
+        note: "Gauge at Stehekin townsite — mainstem trend for the valley corridor.",
+      },
+      {
+        name: "Cascade River (Cascade Pass approach)",
+        gauge_site_id: "12182500",
+        note: "Gauge at Marblemount, well below the trailhead — trend-level relevance.",
+      },
+    ],
   },
   {
     id: "olympic",
@@ -136,6 +177,18 @@ export const AREAS: Area[] = [
       "releases Apr 15 7AM PT. No early-access lottery. Bear canisters required everywhere. " +
       "High-demand quota areas: Sol Duc/7 Lakes, Royal Basin, Grand Valley, Lake Constance, " +
       "Upper Lena, Flapjack, Cape Alava.",
+    crossings: [
+      {
+        name: "Elwha River corridor (Elwha/Long Ridge, Press Expedition route)",
+        gauge_site_id: "12045500",
+        note: "Gauge at McDonald Bridge near Port Angeles — mainstem trend; tributary crossings differ.",
+      },
+      {
+        name: "Quinault River (Enchanted Valley approach)",
+        gauge_site_id: "12039500",
+        note: "Gauge at Quinault Lake, downstream of the valley — trend-level relevance.",
+      },
+    ],
   },
   {
     id: "glacier_peak",
@@ -157,6 +210,18 @@ export const AREAS: Area[] = [
     notes:
       "Self-issued wilderness permits at trailheads. Northwest Forest Pass required for " +
       "trailhead parking. FR 7400 (Suiattle River) closures common. Remote, low-traffic.",
+    crossings: [
+      {
+        name: "White Chuck / upper Sauk crossings (Kennedy Hot Springs, White Chuck corridor)",
+        gauge_site_id: "12186000",
+        note: "Gauge is Sauk R above White Chuck nr Darrington — upstream crossings run smaller but track the same snowmelt trend.",
+      },
+      {
+        name: "Suiattle River corridor (Image Lake, Miners Ridge approaches)",
+        gauge_site_id: "12189500",
+        note: "Gauge is Sauk R near Sauk, downstream of the Suiattle confluence — trend-level relevance only.",
+      },
+    ],
   },
   {
     id: "pasayten",
@@ -197,6 +262,13 @@ export const AREAS: Area[] = [
     notes:
       "Self-issued except for Enchantments Permit Area. Closest big wilderness to Seattle. " +
       "I-90 and US-2 trailheads.",
+    crossings: [
+      {
+        name: "Middle Fork Snoqualmie corridor",
+        gauge_site_id: "12141300",
+        note: "Gauge near Tanner — directly on the Middle Fork approach; upstream crossings run smaller.",
+      },
+    ],
   },
   {
     id: "henry_jackson",
@@ -216,6 +288,13 @@ export const AREAS: Area[] = [
     ],
     usfs_forest_slug: "mbs",
     notes: "Self-issued. US-2 and Mountain Loop Highway access.",
+    crossings: [
+      {
+        name: "Skykomish drainage (US-2 side approaches)",
+        gauge_site_id: "12134500",
+        note: "Gauge near Gold Bar, far downstream — trend-level context only for tributary crossings.",
+      },
+    ],
   },
   {
     id: "goat_rocks",
@@ -236,6 +315,13 @@ export const AREAS: Area[] = [
     notes:
       "Self-issued. PCT corridor through Knife's Edge between Old Snowy and Elk Pass. " +
       "Mountain goats (give them space and salty pee a wide berth).",
+    crossings: [
+      {
+        name: "Cowlitz drainage (Packwood-side approaches)",
+        gauge_site_id: "14226500",
+        note: "Gauge at Packwood, downstream — trend-level context for snowmelt timing.",
+      },
+    ],
   },
   {
     id: "mt_st_helens",

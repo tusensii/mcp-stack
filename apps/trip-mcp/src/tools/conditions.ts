@@ -231,9 +231,10 @@ export function registerConditionsTools(server: McpServer, env: Env): void {
       );
       if (!inciwebRes.ok && inciwebRes.error) caveats.push(inciwebRes.error);
 
-      // Always-on caveat for deferred USFS alerts.
+      // usfs_alerts remains [] here by design — the road-status slice is
+      // superseded by get_access_status (forest alerts-page mention scan).
       caveats.push(
-        "USFS forest-page scraping not yet implemented; check fs.usda.gov manually for forest-specific alerts.",
+        "usfs_alerts is not populated here — use get_access_status for USFS road status (forest alerts-page scan); check fs.usda.gov for other forest-specific alerts.",
       );
 
       const failures = [npsRes, wsdotRes, perimRes, incRes, inciwebRes].filter((r) => !r.ok).length;
