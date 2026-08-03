@@ -61,8 +61,13 @@
  *               <div class="related-hike-links"><ul><li><a href=".../hikes/SLUG">NAME</a>
  *   - Body:     <div id="tripreport-body"><div id="tripreport-body-text">...<p>...</p>...
  *
- * Hike SEARCH (/go-hiking/hikes?searchable_text=Q): server-rendered, this
- * one DOES respect `searchable_text=`.
+ * Hike SEARCH (re-probed 2026-08-02): /go-hiking/hikes now REDIRECTS to
+ * /go-outside/hikes and silently IGNORES `searchable_text=` — the query
+ * param the working endpoint respects is `searchabletext=` (no
+ * underscore) on /go-outside/hikes:
+ *
+ *     GET https://www.wta.org/go-outside/hikes?searchabletext=Q
+ *
  *   - Card:   <div class="search-result-item">
  *   - Title:  <h3 class="listitem-title"><a href="/go-hiking/hikes/SLUG"><span>NAME</span></a>
  *   - Region: <div class="region">REGION</div>      (sibling of listitem-title)
@@ -433,8 +438,10 @@ export async function searchHikes(env: Env, query: string): Promise<HikeSummary[
   const key = `wta:hikes:${query.toLowerCase()}`;
   return cached(env, key, TTL.WTA_LIST, async () => {
     try {
-      // The hikes listing DOES respect `searchable_text=` (unlike trip reports).
-      const url = `${BASE}/go-hiking/hikes?searchable_text=${encodeURIComponent(query)}`;
+      // /go-outside/hikes with `searchabletext=` (no underscore) — the old
+      // /go-hiking/hikes?searchable_text= now redirects to an UNFILTERED
+      // browse page, which silently returns unrelated hikes.
+      const url = `${BASE}/go-outside/hikes?searchabletext=${encodeURIComponent(query)}`;
       const res = await rateLimitedFetch(env, url);
       if (!res.ok) return [];
       const html = await res.text();

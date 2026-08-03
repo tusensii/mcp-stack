@@ -26,14 +26,31 @@ interface WtaFallbackRecord {
 }
 
 /**
+ * Does a WTA hit's name actually resemble the query? WTA's search has
+ * redirected/ignored its query param before (returning a generic browse
+ * list), so never trust result ORDER alone — a fallback record must be
+ * name-similar or it's worse than an empty response.
+ */
+export function hikeNameSimilar(hikeName: string, query: string): boolean {
+  const name = hikeName.toLowerCase();
+  const q = query.toLowerCase().trim();
+  if (!q || !name) return false;
+  if (name.includes(q) || q.includes(name)) return true;
+  const qTokens = q.split(/[\s,;/—-]+/).filter((t) => t.length >= 3);
+  return qTokens.length > 0 && qTokens.every((t) => name.includes(t));
+}
+
+/**
  * Resolve an off-registry query against WTA's hiking guide (3,500+ WA
- * trails). Scrape-backed, so this fails soft: any error or missing
- * coordinate degrades to null and the caller keeps the empty-registry
- * behavior.
+ * trails). Scrape-backed, so this fails soft: any error, missing
+ * coordinate, or top hit whose name doesn't resemble the query degrades
+ * to null and the caller keeps the empty-registry behavior.
  */
 async function wtaFallback(env: Env, query: string): Promise<WtaFallbackRecord | null> {
   try {
-    const hits = await searchHikes(env, query);
+    const hits = (await searchHikes(env, query)).filter((h) =>
+      hikeNameSimilar(h.hike_name, query),
+    );
     const top = hits[0];
     if (!top) return null;
     const detail = await getHikeDetail(env, top.url);
