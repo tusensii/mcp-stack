@@ -435,7 +435,10 @@ export function parseTripReport(html: string, url: string): TripReportDetail {
 /* ------------------------------ hikes ------------------------------ */
 
 export async function searchHikes(env: Env, query: string): Promise<HikeSummary[]> {
-  const key = `wta:hikes:${query.toLowerCase()}`;
+  // v2: the pre-endpoint-fix cache holds unfiltered browse-page results
+  // under the v1 key; a version bump orphans those rather than serving
+  // them for their remaining TTL.
+  const key = `wta:hikes:v2:${query.toLowerCase()}`;
   return cached(env, key, TTL.WTA_LIST, async () => {
     try {
       // /go-outside/hikes with `searchabletext=` (no underscore) — the old
