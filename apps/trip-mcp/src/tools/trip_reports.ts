@@ -9,8 +9,23 @@ import { z } from "zod";
 import type { Env } from "../types.js";
 import { empty, makeSource, ok } from "../types.js";
 import { findAreaById } from "../areas.js";
-import { searchTripReports, type TripReportSummary } from "../sources/wta.js";
+import { getTripReport, searchTripReports, type TripReportSummary } from "../sources/wta.js";
+import {
+  extractConditions,
+  rollupConditions,
+  type ExtractedConditions,
+  type ReportExtraction,
+} from "../extraction.js";
 import { payloadResponse, titledTool } from "./utils.js";
+
+/** Detail pages fetched per call in extraction mode (throttled scrape). */
+const DETAIL_FETCH_LIMIT = 5;
+
+interface ReportWithConditions extends TripReportSummary {
+  conditions?: ExtractedConditions;
+  /** "detail" = full report page + WTA conditions table; "blurb" = listing snippet only. */
+  extraction_source?: "detail" | "blurb";
+}
 
 const argsShape = {
   area_id: z
@@ -39,6 +54,12 @@ const argsShape = {
     .max(50)
     .optional()
     .describe("Max reports to return. Default 15."),
+  extract_conditions: z
+    .boolean()
+    .default(false)
+    .describe(
+      "Attach a structured conditions block (snow/snow line, blowdowns, road, bugs, water, crowding) per report plus a cross-report rollup. Heuristic keyword extraction (low confidence) — absent fields are null, never inferred. Fetches up to 5 full report pages (slower on cold cache).",
+    ),
 };
 
 export function registerTripReportTools(server: McpServer, env: Env): void {
@@ -48,7 +69,7 @@ export function registerTripReportTools(server: McpServer, env: Env): void {
     "Reading recent trip reports…",
     "Returns recent Washington Trails Association (WTA) trip reports for a PNW area or trail. Trip reports are user-submitted observations of actual conditions (snow level, water sources, blowdowns, road status, bug pressure) and are the single best source of recent ground-truth for WA hikes — better than AllTrails for this use case. Scraped from wta.org with attribution; cache may be up to 24h stale (medium confidence). Use `area_id` from `find_areas` when available; if no reports come back for the area name, the orchestrator will retry with the most distinctive alias (e.g., \"Image Lake\" instead of \"Glacier Peak Wilderness\"). PNW only — for non-WA trips this tool will return empty; fall back to `web_research`. If a report mentions a road closure, blowdown, or condition that contradicts an official source (e.g., USFS says trail open, report says blocked), surface BOTH to the user and recommend they call the ranger station to resolve.",
     argsShape,
-    async ({ area_id, area_name, trail_name, since_days, limit }) => {
+    async ({ area_id, area_name, trail_name, since_days, limit, extract_conditions }) => {
       const sinceDays = since_days ?? 60;
       const max = limit ?? 15;
 
@@ -102,15 +123,67 @@ export function registerTripReportTools(server: McpServer, env: Env): void {
         );
       }
 
+      const caveats = [
+        "WTA data is scraped (no SLA); fields may be missing if site markup changed.",
+        "Reports without a parseable hike date are kept in results.",
+      ];
+
+      if (!extract_conditions) {
+        return payloadResponse(
+          ok({ reports: filtered, query_used: query }, [source], "medium", caveats),
+        );
+      }
+
+      // Extraction mode: fetch full pages for the first few reports (the
+      // WTA conditions table + body are far higher-signal than the
+      // listing blurb); the rest extract from title+blurb only.
+      const withConditions: ReportWithConditions[] = await Promise.all(
+        filtered.map(async (r, i): Promise<ReportWithConditions> => {
+          let text = [r.title, r.conditions_blurb].filter(Boolean).join("\n");
+          let extractionSource: "detail" | "blurb" = "blurb";
+          if (i < DETAIL_FETCH_LIMIT) {
+            try {
+              const detail = await getTripReport(env, r.url);
+              if (detail) {
+                extractionSource = "detail";
+                const condTable = Object.entries(detail.conditions)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join("\n");
+                text = [r.title, condTable, detail.body, r.conditions_blurb]
+                  .filter(Boolean)
+                  .join("\n");
+              }
+            } catch {
+              // fall back to blurb extraction
+            }
+          }
+          return { ...r, conditions: extractConditions(text), extraction_source: extractionSource };
+        }),
+      );
+
+      const extractions: ReportExtraction[] = withConditions.map((r) => ({
+        url: r.url,
+        title: r.title,
+        date_hiked: r.date_hiked,
+        conditions: r.conditions!,
+      }));
+
+      caveats.push(
+        "Condition extraction is heuristic keyword matching (low confidence): absent fields mean the report didn't clearly mention them, not that conditions are absent. Read the cited reports before relying on a specific claim.",
+        `Full-page extraction covers the first ${Math.min(DETAIL_FETCH_LIMIT, withConditions.length)} reports; the rest are extracted from listing blurbs only (see per-report extraction_source).`,
+      );
+
       return payloadResponse(
         ok(
-          { reports: filtered, query_used: query },
+          {
+            reports: withConditions,
+            query_used: query,
+            conditions_rollup: rollupConditions(extractions),
+            extraction: { method: "heuristic", confidence: "low" as const },
+          },
           [source],
           "medium",
-          [
-            "WTA data is scraped (no SLA); fields may be missing if site markup changed.",
-            "Reports without a parseable hike date are kept in results.",
-          ],
+          caveats,
         ),
       );
     },
