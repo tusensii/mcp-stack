@@ -35,16 +35,65 @@ export function mainPeriodForDay(periods: SleepPeriod[], day: string): SleepPeri
 }
 
 /**
- * Finds the most recent complete night (largest bedtime_end) among
- * sleep/long_sleep, non-deleted periods in the given list.
+ * Upstream /sleep window to request for the no-`date` "most recent synced
+ * night" lookup, given today's date in the user's timezone.
+ *
+ * Same #33 hazard the sleep tools work around: the Oura /sleep endpoint does
+ * NOT filter on `day`, so a record with `day: X` is silently dropped from a
+ * query whose `end_date` is X. Observed live on 2026-08-24
+ * (America/Los_Angeles): a long_sleep with `day: 2026-08-24` /
+ * `bedtime_start: 2026-08-23T22:59:54-07:00` was absent from
+ * `start=2026-08-21&end=2026-08-24` but present from the same query ending
+ * 2026-08-25. Without the +1 day on the end, night_summary could never see
+ * last night and always lagged one night behind oura_sleep_detail.
+ *
+ * So: widen by one day on each side and post-filter by `day`
+ * (selectMostRecentNight), the same pattern oura_sleep_detail/oura_naps use.
  */
-export function mostRecentNight(periods: SleepPeriod[]): SleepPeriod | undefined {
-  let best: SleepPeriod | undefined;
-  for (const p of periods) {
-    if (p.type !== "sleep" && p.type !== "long_sleep") continue;
-    if (!best || Date.parse(p.bedtime_end) > Date.parse(best.bedtime_end)) best = p;
+export function lookbackWindow(today: string): { start_date: string; end_date: string } {
+  return {
+    start_date: addDays(today, -(LOOKBACK_DAYS + 1)),
+    end_date: addDays(today, 1),
+  };
+}
+
+/**
+ * Picks the most recent complete night at or before `today` out of the raw
+ * (widened) upstream response.
+ *
+ * Selection rule:
+ *   1. keep sleep/long_sleep periods whose `day` lands in the lookback window
+ *      [today - LOOKBACK_DAYS, today] — this re-applies the `day` filter the
+ *      widening in lookbackWindow deliberately relaxed, and keeps a period
+ *      keyed forward to tomorrow from dragging the answer past today;
+ *   2. take the latest such `day`;
+ *   3. return that day's main (longest) period — the same rule the explicit
+ *      `date` branch uses, so both branches agree with oura_sleep_detail.
+ *
+ * Keying on `day` rather than on the largest `bedtime_end` is deliberate:
+ * `day` is the morning-of-report field the rest of the response
+ * (daily_sleep / daily_readiness / tags) is looked up by, and it keeps a short
+ * evening `sleep` record from outranking the real night it belongs to.
+ *
+ * Nothing is excluded on the basis of `sleep_analysis_reason` or a non-zero
+ * score delta: a `bedtime_edit` night is a real, complete night and must stay
+ * selectable.
+ */
+export function selectMostRecentNight(
+  periods: SleepPeriod[],
+  today: string,
+): SleepPeriod | undefined {
+  const windowStart = addDays(today, -LOOKBACK_DAYS);
+  const inWindow = periods.filter(
+    (p) =>
+      (p.type === "sleep" || p.type === "long_sleep") && p.day >= windowStart && p.day <= today,
+  );
+  let latestDay: string | undefined;
+  for (const p of inWindow) {
+    if (!latestDay || p.day > latestDay) latestDay = p.day;
   }
-  return best;
+  if (!latestDay) return undefined;
+  return mainPeriodForDay(inWindow, latestDay);
 }
 
 export function registerNightSummaryTool(server: McpServer, client: OuraClient): void {
@@ -61,6 +110,8 @@ export function registerNightSummaryTool(server: McpServer, client: OuraClient):
       "morning-of-report date convention mismatch documented elsewhere in this server. " +
       "Default (no `date`): the most recently synced complete night within the last " +
       `${LOOKBACK_DAYS} days. ` +
+      "That is the same night oura_sleep_detail returns for today when today's night has synced, " +
+      "falling back through the lookback window only when it hasn't. " +
       "Pass `date` (YYYY-MM-DD, morning-of-report convention — same as oura_daily_sleep's \"day\") " +
       "to summarize a specific morning instead. " +
       "Contains no bulky per-sample time-series data.",
@@ -86,9 +137,8 @@ export function registerNightSummaryTool(server: McpServer, client: OuraClient):
           resolvedDay = date;
         } else {
           const today = todayInTz();
-          const windowStart = addDays(today, -LOOKBACK_DAYS);
-          const periods = await getSleepPeriods(client, { start_date: windowStart, end_date: today });
-          mainPeriod = mostRecentNight(periods);
+          const periods = await getSleepPeriods(client, lookbackWindow(today));
+          mainPeriod = selectMostRecentNight(periods, today);
           if (!mainPeriod) {
             return errorContent(
               `No synced sleep period found in the last ${LOOKBACK_DAYS} days. The most recent night may not have synced yet.`,
