@@ -14,7 +14,10 @@
     "deploy:oura": "pnpm --filter oura-mcp deploy",
     "deploy:gmail": "pnpm --filter gmail-mcp deploy",
     "deploy:trip": "pnpm --filter trip-mcp deploy",
-    "deploy:github": "pnpm --filter github-mcp deploy"
+    "deploy:github": "pnpm --filter github-mcp deploy",
+    "deploy:therapy": "pnpm --filter therapy-mcp deploy",
+    "deploy:otf": "pnpm --filter otf-mcp deploy",
+    "deploy:calendar": "pnpm --filter calendar-mcp deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260426.1",

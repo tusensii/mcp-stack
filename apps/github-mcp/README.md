@@ -66,7 +66,12 @@ pnpm wrangler secret put GITHUB_DEFAULT_REPO   # e.g. tusensii/mcp-stack
 # should touch: comma-separated owner/repo allowlist. GITHUB_DEFAULT_REPO
 # is implicitly included. Tool calls targeting any other repo are rejected
 # before hitting the GitHub API.
-pnpm wrangler secret put GITHUB_ALLOWED_REPOS  # e.g. tusensii/mcp-stack,tusensii/mcp-stack-private
+pnpm wrangler secret put GITHUB_ALLOWED_REPOS  # e.g. tusensii/mcp-stack
+
+# Note: the PAT must be able to read/write PRIVATE repos — tusensii/mcp-stack
+# is private. A classic PAT needs the full `repo` scope; a fine-grained PAT
+# needs this repository explicitly selected. A PAT scoped to public repos
+# only fails as 404s that look like missing issues, not as auth errors.
 
 pnpm run deploy
 ```

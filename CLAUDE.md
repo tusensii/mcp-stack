@@ -75,6 +75,22 @@ gh pr create --title "[<app>] <summary>" --body "Closes #<N>\n\n<changes>"
 One issue → one branch → one PR. If an issue is too large for one PR,
 file follow-up issues; don't pile changes into one branch.
 
+### Closing: `Closes #N` means verified, not merged
+
+`Closes #N` fires the moment the PR merges, which is wrong for any issue
+whose acceptance criteria include something a merge can't establish —
+"verified rendering in a live client", "succeeds against the live
+account", anything needing a deploy first.
+
+If an issue has a criterion like that, **don't** put `Closes #N` in the PR
+body. Reference it (`Refs #N`), merge, deploy, verify, then close the
+issue by hand with a comment recording what was checked.
+
+This is not hypothetical: #92 was auto-closed as completed one minute
+after a comment stating its third criterion could not be checked yet, and
+the three Workers it fixed went undeployed. A merged PR is not a
+delivered fix.
+
 ## Repo conventions (general)
 
 - Node 20+, pnpm 10+, ESM only.
@@ -93,16 +109,28 @@ file follow-up issues; don't pile changes into one branch.
   consume them. New apps should reach for these before reinventing.
 - `apps/*` — one Cloudflare Worker each. Independent at runtime; no shared
   state, no shared KV, no shared Durable Objects.
-- Private siblings (therapy-mcp, otf-mcp) live in `tusensii/mcp-stack-private`
-  and are out of scope for this repo. Don't reference them in public code or
-  issues.
+- This repo is **private** and holds the whole stack — all seven Workers,
+  including therapy-mcp, otf-mcp, and calendar-mcp. There is no public
+  sibling and no second copy of anything: `tusensii/mcp-stack-private` was
+  folded back in and archived. If you find a reference to it anywhere,
+  it's stale — fix it.
+- therapy-mcp and otf-mcp are reverse-engineered clients against vendors
+  with no public API (Sessions Health, Orangetheory). That's why this repo
+  is private and must stay private. Don't add a public mirror, don't
+  publish these two apps, and keep vendor-specific request details out of
+  anything that leaves the repo.
 
 ## Deployment
 
 The default path is **CI auto-deploys on push to `main`**
-(`.github/workflows/deploy.yml`). Each Worker app deploys only when its own
-files changed or a shared `packages/**` / lockfile change touched it. The
-test gate (`pnpm type-check` + `pnpm test`) must pass first.
+(`.github/workflows/deploy.yml`), for all seven apps. Each Worker deploys
+only when its own files changed or a shared `packages/**` / lockfile change
+touched it. The test gate (`pnpm type-check` + `pnpm test`) must pass first.
+
+The affected apps are computed into a JSON matrix by the workflow's
+`changes` job. Adding an app means editing two spots in that file — the
+`ALL_APPS` list and the paths-filter/case pair — not threading a new
+boolean through every job.
 
 Manual `pnpm wrangler deploy` from an app dir is still available — use it
 for out-of-band fixes, deploying from a branch, or smoke-testing before
