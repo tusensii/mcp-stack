@@ -5,7 +5,18 @@
  *  - Self-throttle to <=1 req/sec per Worker isolate.
  *  - Cache aggressively (TTL.OSM = 7d) — trail/parking geometry rarely changes.
  *  - Always identify ourselves with a descriptive User-Agent.
- *  - Defensive parsing — return empty arrays on any failure.
+ *  - Defensive parsing — never throw out of a finder.
+ *
+ * Failures are reported, not swallowed. Every finder returns an `OsmResult`
+ * carrying an `OverpassStatus` alongside its items, because an empty array
+ * from a timed-out query and an empty array from a genuinely unmapped bbox
+ * are the same value and mean opposite things (#93). Overpass makes this
+ * particularly easy to get wrong: a query that times out or runs out of
+ * memory answers **HTTP 200** with `elements: []` and an explanatory
+ * `remark` field, so status-code checking alone is not enough.
+ *
+ * Failed results are never written to the cache — a swallowed timeout used
+ * to poison a bbox for the full 7-day TTL.
  */
 
 import { createFetchClient } from "@mcp-stack/http-fetch";
@@ -72,6 +83,89 @@ interface OverpassElement {
 
 interface OverpassResponse {
   elements?: OverpassElement[];
+  /** Overpass reports timeouts and OOM here, with HTTP 200. */
+  remark?: string;
+}
+
+/** Why an Overpass query did not produce trustworthy data. */
+export type OverpassFailure =
+  | "timeout"
+  | "rate_limited"
+  | "http_error"
+  | "network_error"
+  | "server_remark"
+  | "bad_response";
+
+export interface OverpassStatus {
+  ok: boolean;
+  failure?: OverpassFailure;
+  /** Human-readable detail for the caveat text. */
+  detail?: string;
+}
+
+export const OVERPASS_OK: OverpassStatus = { ok: true };
+
+/** Items plus whether the query that produced them actually succeeded. */
+export interface OsmResult<T> {
+  items: T[];
+  status: OverpassStatus;
+}
+
+function failedResult<T>(status: OverpassStatus): OsmResult<T> {
+  return { items: [], status };
+}
+
+/**
+ * One-line explanation of a failure, phrased so a consuming model cannot
+ * read it as a statement about what is on the ground.
+ */
+export function describeOverpassFailure(status: OverpassStatus): string {
+  switch (status.failure) {
+    case "timeout":
+      return "the Overpass query timed out";
+    case "rate_limited":
+      return "Overpass rate-limited the request";
+    case "http_error":
+      return `Overpass returned ${status.detail ?? "an HTTP error"}`;
+    case "network_error":
+      return `the Overpass request failed (${status.detail ?? "network error"})`;
+    case "server_remark":
+      return `Overpass reported a problem (${status.detail ?? "server remark"})`;
+    case "bad_response":
+      return "the Overpass response could not be parsed";
+    default:
+      return "the Overpass query failed";
+  }
+}
+
+/** Classify the `remark` Overpass returns alongside HTTP 200 on failure. */
+export function classifyRemark(remark: string): OverpassFailure {
+  const r = remark.toLowerCase();
+  if (r.includes("timed out") || r.includes("timeout")) return "timeout";
+  if (r.includes("too many requests") || r.includes("rate limit")) return "rate_limited";
+  return "server_remark";
+}
+
+export function classifyHttpStatus(code: number): OverpassFailure {
+  if (code === 429) return "rate_limited";
+  if (code === 504 || code === 408) return "timeout";
+  return "http_error";
+}
+
+/**
+ * Classify an error thrown by the fetch client.
+ *
+ * `@mcp-stack/http-fetch` converts a 429 into a `RateLimitError` and an
+ * aborted request into a `TimeoutError` before `runOverpass` ever sees the
+ * response, so those two never reach the status-code branch — without this
+ * they would both be filed as generic network failures.
+ */
+export function classifyThrownError(err: unknown): OverpassFailure {
+  const name = (err as Error)?.name;
+  if (name === "RateLimitError") return "rate_limited";
+  if (name === "TimeoutError") return "timeout";
+  if (name === "HttpError") return "http_error";
+  return "network_error";
 }
 
 // --- Self-throttle (module-scoped) ---------------------------------------
@@ -96,7 +190,17 @@ function client(env: Env) {
   });
 }
 
-async function runOverpass(env: Env, query: string): Promise<OverpassElement[]> {
+/**
+ * Run one Overpass query, reporting *why* it produced nothing when it does.
+ *
+ * The three failure shapes, in the order they bite:
+ *   1. HTTP error       — 429 rate limit, 504 gateway timeout, 5xx.
+ *   2. HTTP 200 + remark — query timed out or ran out of memory server-side.
+ *                          This is the one that looked like a real answer.
+ *   3. Throw            — network failure, or a non-JSON body (Overpass
+ *                          serves an HTML error page under load).
+ */
+async function runOverpass(env: Env, query: string): Promise<OsmResult<OverpassElement>> {
   await throttle();
   const c = client(env);
   try {
@@ -105,12 +209,55 @@ async function runOverpass(env: Env, query: string): Promise<OverpassElement[]> 
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `data=${encodeURIComponent(query)}`,
     });
-    if (!res.ok) return [];
-    const json = (await res.json()) as OverpassResponse;
-    return Array.isArray(json.elements) ? json.elements : [];
-  } catch {
-    return [];
+    if (!res.ok) {
+      return failedResult({
+        ok: false,
+        failure: classifyHttpStatus(res.status),
+        detail: `HTTP ${res.status}`,
+      });
+    }
+
+    let json: OverpassResponse;
+    try {
+      json = (await res.json()) as OverpassResponse;
+    } catch (cause) {
+      return failedResult({
+        ok: false,
+        failure: "bad_response",
+        detail: (cause as Error).message,
+      });
+    }
+
+    if (typeof json.remark === "string" && json.remark.trim()) {
+      // Overpass answers 200 with an empty element list and a remark when the
+      // query timed out or exhausted memory. Believing this is the bug.
+      return failedResult({
+        ok: false,
+        failure: classifyRemark(json.remark),
+        detail: json.remark.trim().slice(0, 200),
+      });
+    }
+
+    if (!Array.isArray(json.elements)) {
+      return failedResult({
+        ok: false,
+        failure: "bad_response",
+        detail: "response had no `elements` array",
+      });
+    }
+    return { items: json.elements, status: OVERPASS_OK };
+  } catch (cause) {
+    return failedResult({
+      ok: false,
+      failure: classifyThrownError(cause),
+      detail: (cause as Error)?.message ?? String(cause),
+    });
   }
+}
+
+/** Never persist a failed lookup — it would mask the outage for the full TTL. */
+function isFailed(result: { status: OverpassStatus }): boolean {
+  return !result.status.ok;
 }
 
 /** Round bbox for cache key stability. */
@@ -246,11 +393,19 @@ export async function getOsmGeometry(env: Env, osmId: string): Promise<OsmGeomet
   if (!m) return null;
   const type = (m[1] ?? "way").toLowerCase();
   const id = m[2]!;
-  const key = `osm:geom:v2:${type}/${id}`;
+  const key = `osm:geom:v3:${type}/${id}`;
+  // A `null` here means "not found" *or* "lookup failed"; only the former is
+  // worth remembering, so a failed run skips the cache rather than pinning
+  // the miss for a week.
+  let lookupFailed = false;
   return cached(env, key, TTL.OSM, async () => {
     const query = `[out:json][timeout:25];${type}(${id});out tags geom;`;
-    const elements = await runOverpass(env, query);
-    const el = elements[0];
+    const run = await runOverpass(env, query);
+    if (!run.status.ok) {
+      lookupFailed = true;
+      return null;
+    }
+    const el = run.items[0];
     if (!el) return null;
 
     let points: Array<{ lat: number; lon: number }> = [];
@@ -280,7 +435,7 @@ export async function getOsmGeometry(env: Env, osmId: string): Promise<OsmGeomet
     if (assembly) result.assembly = assembly;
     if (el.tags?.ref) result.ref = el.tags.ref;
     return result;
-  });
+  }, { skipCache: () => lookupFailed });
 }
 
 /**
@@ -300,7 +455,8 @@ export async function findTrailGeometryByName(
   query: string,
   hint?: { lat: number; lon: number },
 ): Promise<OsmGeometry | null> {
-  const key = `osm:trailgeom:v3:${bboxKey(bbox)}:${query.toLowerCase().trim()}`;
+  const key = `osm:trailgeom:v4:${bboxKey(bbox)}:${query.toLowerCase().trim()}`;
+  let lookupFailed = false;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     const q =
@@ -310,7 +466,12 @@ export async function findTrailGeometryByName(
       `relation["route"~"hiking|foot"](${swne});` +
       `);` +
       `out tags geom;`;
-    const elements = await runOverpass(env, q);
+    const run = await runOverpass(env, q);
+    if (!run.status.ok) {
+      lookupFailed = true;
+      return null;
+    }
+    const elements = run.items;
     const start = hint ?? {
       lat: (bbox[1] + bbox[3]) / 2,
       lon: (bbox[0] + bbox[2]) / 2,
@@ -387,11 +548,12 @@ export async function findTrailGeometryByName(
     };
     if (primary.tags?.ref) result.ref = primary.tags.ref;
     return result;
-  });
+  }, { skipCache: () => lookupFailed });
 }
 
-export async function findTrails(env: Env, bbox: Bbox): Promise<OsmTrail[]> {
-  const key = `osm:trails:${bboxKey(bbox)}`;
+export async function findTrails(env: Env, bbox: Bbox): Promise<OsmResult<OsmTrail>> {
+  // v2: the cached shape gained a status field.
+  const key = `osm:trails:v2:${bboxKey(bbox)}`;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     const query =
@@ -401,8 +563,9 @@ export async function findTrails(env: Env, bbox: Bbox): Promise<OsmTrail[]> {
       `relation["route"="hiking"](${swne});` +
       `);` +
       `out tags geom;`;
-    const elements = await runOverpass(env, query);
-    return elements.map((el) => {
+    const run = await runOverpass(env, query);
+    if (!run.status.ok) return failedResult<OsmTrail>(run.status);
+    const items = run.items.map((el) => {
       const trail: OsmTrail = {
         id: `${el.type}/${el.id}`,
         name: el.tags?.name ?? el.tags?.ref ?? "",
@@ -416,11 +579,12 @@ export async function findTrails(env: Env, bbox: Bbox): Promise<OsmTrail[]> {
       if (altNames.length > 0) trail.alt_names = altNames;
       return trail;
     });
-  });
+    return { items, status: OVERPASS_OK };
+  }, { skipCache: isFailed });
 }
 
-export async function findTrailheads(env: Env, bbox: Bbox): Promise<OsmTrailhead[]> {
-  const key = `osm:trailheads:${bboxKey(bbox)}`;
+export async function findTrailheads(env: Env, bbox: Bbox): Promise<OsmResult<OsmTrailhead>> {
+  const key = `osm:trailheads:v2:${bboxKey(bbox)}`;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     // Broaden the trailhead query: many real PNW trailheads are tagged
@@ -439,8 +603,9 @@ export async function findTrailheads(env: Env, bbox: Bbox): Promise<OsmTrailhead
       `node["tourism"="information"](${swne});` +
       `);` +
       `out tags center;`;
-    const elements = await runOverpass(env, query);
-    return elements
+    const run = await runOverpass(env, query);
+    if (!run.status.ok) return failedResult<OsmTrailhead>(run.status);
+    const items = run.items
       .map((el) => {
         const lat = el.lat ?? el.center?.lat;
         const lon = el.lon ?? el.center?.lon;
@@ -457,7 +622,8 @@ export async function findTrailheads(env: Env, bbox: Bbox): Promise<OsmTrailhead
         return result;
       })
       .filter((t): t is OsmTrailhead => t !== null);
-  });
+    return { items, status: OVERPASS_OK };
+  }, { skipCache: isFailed });
 }
 
 export interface OsmCampsite {
@@ -470,8 +636,8 @@ export interface OsmCampsite {
 }
 
 /** Mapped camp sites/pitches in a bbox — incomplete and unofficial by nature. */
-export async function findCampsites(env: Env, bbox: Bbox): Promise<OsmCampsite[]> {
-  const key = `osm:camps:${bboxKey(bbox)}`;
+export async function findCampsites(env: Env, bbox: Bbox): Promise<OsmResult<OsmCampsite>> {
+  const key = `osm:camps:v2:${bboxKey(bbox)}`;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     const query =
@@ -483,8 +649,9 @@ export async function findCampsites(env: Env, bbox: Bbox): Promise<OsmCampsite[]
       `way["tourism"="camp_pitch"](${swne});` +
       `);` +
       `out tags center;`;
-    const elements = await runOverpass(env, query);
-    return elements
+    const run = await runOverpass(env, query);
+    if (!run.status.ok) return failedResult<OsmCampsite>(run.status);
+    const items = run.items
       .map((el) => {
         const lat = el.lat ?? el.center?.lat;
         const lon = el.lon ?? el.center?.lon;
@@ -500,11 +667,12 @@ export async function findCampsites(env: Env, bbox: Bbox): Promise<OsmCampsite[]
         return site;
       })
       .filter((s): s is OsmCampsite => s !== null);
-  });
+    return { items, status: OVERPASS_OK };
+  }, { skipCache: isFailed });
 }
 
-export async function findWaterSources(env: Env, bbox: Bbox): Promise<OsmWaterSource[]> {
-  const key = `osm:water:${bboxKey(bbox)}`;
+export async function findWaterSources(env: Env, bbox: Bbox): Promise<OsmResult<OsmWaterSource>> {
+  const key = `osm:water:v2:${bboxKey(bbox)}`;
   return cached(env, key, TTL.OSM, async () => {
     const swne = bboxAsSwne(bbox);
     const query =
@@ -516,8 +684,9 @@ export async function findWaterSources(env: Env, bbox: Bbox): Promise<OsmWaterSo
       `way["waterway"~"stream|river"](${swne});` +
       `);` +
       `out tags geom;`;
-    const elements = await runOverpass(env, query);
-    return elements.map((el) => {
+    const run = await runOverpass(env, query);
+    if (!run.status.ok) return failedResult<OsmWaterSource>(run.status);
+    const items = run.items.map((el) => {
       const tags = el.tags ?? {};
       let kind: OsmWaterSource["kind"] = "waterway";
       if (tags.natural === "spring") kind = "spring";
@@ -544,5 +713,6 @@ export async function findWaterSources(env: Env, bbox: Bbox): Promise<OsmWaterSo
       if (el.geometry && el.geometry.length > 0) out.geometry = el.geometry;
       return out;
     });
-  });
+    return { items, status: OVERPASS_OK };
+  }, { skipCache: isFailed });
 }

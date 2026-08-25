@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import * as osm from "./osm.js";
 import { expandTrailAliases } from "../areas.js";
+import type { Env } from "../types.js";
 
 describe("osm source", () => {
   it("module loads", () => {
@@ -15,6 +16,115 @@ describe("osm source", () => {
   it.todo("findTrailheads filters to amenity=parking + hiking=yes");
   it.todo("findWaterSources tags springs vs streams correctly");
   it.todo("self-throttle enforces ~1 req/sec");
+});
+
+// #93 — an empty Overpass result must carry why it is empty.
+describe("Overpass failure classification", () => {
+  it("reads a server-side timeout out of the remark, not the status code", () => {
+    expect(
+      osm.classifyRemark(
+        'runtime error: Query timed out in "query" at line 1 after 25 seconds.',
+      ),
+    ).toBe("timeout");
+  });
+
+  it("recognises rate limiting in a remark", () => {
+    expect(osm.classifyRemark("Too many requests from your IP")).toBe("rate_limited");
+    expect(osm.classifyRemark("rate limit exceeded")).toBe("rate_limited");
+  });
+
+  it("falls back to a generic remark failure for anything else", () => {
+    expect(osm.classifyRemark("runtime error: Query ran out of memory")).toBe(
+      "server_remark",
+    );
+  });
+
+  it("maps HTTP codes to the failure they represent", () => {
+    expect(osm.classifyHttpStatus(429)).toBe("rate_limited");
+    expect(osm.classifyHttpStatus(504)).toBe("timeout");
+    expect(osm.classifyHttpStatus(408)).toBe("timeout");
+    expect(osm.classifyHttpStatus(500)).toBe("http_error");
+    expect(osm.classifyHttpStatus(403)).toBe("http_error");
+  });
+
+  // http-fetch converts these before the status code is ever visible.
+  it("classifies the errors the fetch client throws rather than lumping them together", () => {
+    const named = (name: string) => Object.assign(new Error("x"), { name });
+    expect(osm.classifyThrownError(named("RateLimitError"))).toBe("rate_limited");
+    expect(osm.classifyThrownError(named("TimeoutError"))).toBe("timeout");
+    expect(osm.classifyThrownError(named("HttpError"))).toBe("http_error");
+    expect(osm.classifyThrownError(new TypeError("fetch failed"))).toBe("network_error");
+    expect(osm.classifyThrownError(undefined)).toBe("network_error");
+  });
+
+  it("describes every failure as an upstream problem, never as a finding", () => {
+    for (const failure of [
+      "timeout",
+      "rate_limited",
+      "http_error",
+      "network_error",
+      "server_remark",
+      "bad_response",
+    ] as const) {
+      const text = osm.describeOverpassFailure({ ok: false, failure });
+      expect(text).toBeTruthy();
+      // Nothing in the phrasing should read as a statement about the ground.
+      expect(text).not.toMatch(/\bno\b.*(trail|water|feature)/i);
+    }
+  });
+});
+
+describe("finders report query outcome", () => {
+  const env = { CONTACT: "test@example.com" } as Env;
+  const bbox: osm.Bbox = [-121.4, 46.44, -121.26, 46.53];
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubFetch(body: unknown, init: { ok?: boolean; status?: number } = {}) {
+    const status = init.status ?? 200;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: init.ok ?? (status >= 200 && status < 300),
+        status,
+        statusText: "",
+        headers: new Headers(),
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      })),
+    );
+  }
+
+  // The exact shape that produced the bug: HTTP 200, empty elements, remark.
+  it("marks a timed-out query as failed even though it answered HTTP 200", async () => {
+    stubFetch({
+      version: 0.6,
+      elements: [],
+      remark: 'runtime error: Query timed out in "query" at line 1 after 25 seconds.',
+    });
+    const result = await osm.findTrails(env, bbox);
+    expect(result.items).toEqual([]);
+    expect(result.status.ok).toBe(false);
+    expect(result.status.failure).toBe("timeout");
+    expect(result.status.detail).toContain("timed out");
+  });
+
+  it("reports a genuinely empty successful query as ok", async () => {
+    stubFetch({ version: 0.6, elements: [] });
+    const result = await osm.findTrailheads(env, bbox);
+    expect(result.items).toEqual([]);
+    expect(result.status.ok).toBe(true);
+    expect(result.status.failure).toBeUndefined();
+  });
+
+  it("treats a non-array elements field as a bad response", async () => {
+    stubFetch({ version: 0.6 });
+    const result = await osm.findWaterSources(env, bbox);
+    expect(result.status.ok).toBe(false);
+    expect(result.status.failure).toBe("bad_response");
+  });
 });
 
 describe("trailMatchesQuery", () => {

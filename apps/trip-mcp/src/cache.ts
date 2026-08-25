@@ -5,11 +5,23 @@
 
 import type { Env } from "./types.js";
 
+export interface CacheOptions<T> {
+  /**
+   * Return true to leave a value out of the cache.
+   *
+   * Exists because caching a failed upstream lookup is worse than not
+   * caching at all: a single Overpass timeout used to persist as an
+   * authoritative-looking empty result for the full 7-day TTL (#93).
+   */
+  skipCache?: (value: T) => boolean;
+}
+
 export async function cached<T>(
   env: Env,
   key: string,
   ttlSeconds: number,
   fn: () => Promise<T>,
+  options: CacheOptions<T> = {},
 ): Promise<T> {
   if (!env.CACHE) return fn();
   try {
@@ -19,6 +31,7 @@ export async function cached<T>(
     // fall through to fresh fetch
   }
   const value = await fn();
+  if (options.skipCache?.(value)) return value;
   try {
     await env.CACHE.put(key, JSON.stringify(value), { expirationTtl: ttlSeconds });
   } catch {

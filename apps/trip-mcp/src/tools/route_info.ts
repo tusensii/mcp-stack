@@ -9,16 +9,19 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Confidence, Env, Source, ToolPayload } from "../types.js";
 import { empty, makeSource, ok } from "../types.js";
-import { expandTrailAliases, findAreaById } from "../areas.js";
+import { expandTrailAliases, findAreaById, nearestArea } from "../areas.js";
 import {
+  describeOverpassFailure,
   findTrails,
   findTrailheads,
   findWaterSources,
   osmTrailMatchesQuery,
   type Bbox,
+  type OsmResult,
   type OsmTrail,
   type OsmTrailhead,
   type OsmWaterSource,
+  type OverpassStatus,
 } from "../sources/osm.js";
 import { getElevation } from "../sources/usgs.js";
 import { payloadResponse, roundCoord, titledTool } from "./utils.js";
@@ -36,6 +39,19 @@ interface RouteInfoData {
   centroid_elevation_ft: number | null;
   water_summary: string;
   driving_from_seattle_minutes?: number;
+  /**
+   * Per-source outcome for this pull (#93). `ok: false` means the lists above
+   * are not a description of the area — they are what is left after a failed
+   * lookup. Check this before reading any zero as an absence.
+   */
+  source_status: {
+    osm_trails: OverpassStatus;
+    osm_trailheads: OverpassStatus;
+    osm_water: OverpassStatus;
+    usgs_elevation: { ok: boolean };
+    /** Every query succeeded but returned nothing somewhere that cannot be empty. */
+    implausibly_empty: boolean;
+  };
 }
 
 const STANDARD_CAVEATS = [
@@ -45,6 +61,37 @@ const STANDARD_CAVEATS = [
 
 /** Earth radius in km for crude lat/lon ↔ km conversion. */
 const KM_PER_DEG_LAT = 111.32;
+
+/**
+ * How close a point must be to a registered area's centroid before an empty
+ * OSM result there is treated as implausible. The registry holds centroids,
+ * not polygons, so this is deliberately generous — WA wilderness units run
+ * tens of km across, and a false "upstream may have failed" caveat costs far
+ * less than a false "no water here".
+ */
+const KNOWN_AREA_RADIUS_KM = 30;
+
+/** Below this search radius, an empty result is unremarkable. */
+const MIN_IMPLAUSIBLE_RADIUS_KM = 5;
+
+/**
+ * Zero trails AND zero trailheads, over a wide radius, inside a known
+ * wilderness area is not a believable description of the ground. Overpass
+ * returns HTTP 200 with an empty element list often enough that this needs
+ * saying out loud rather than being left to the reader (#93).
+ */
+export function isImplausiblyEmpty(args: {
+  trailCount: number;
+  trailheadCount: number;
+  radius_km: number;
+  lat: number;
+  lon: number;
+}): boolean {
+  if (args.trailCount > 0 || args.trailheadCount > 0) return false;
+  if (args.radius_km < MIN_IMPLAUSIBLE_RADIUS_KM) return false;
+  const near = nearestArea(args.lat, args.lon);
+  return Boolean(near && near.distance_km <= KNOWN_AREA_RADIUS_KM);
+}
 
 function bboxAround(lat: number, lon: number, radius_km: number): Bbox {
   const dLat = radius_km / KM_PER_DEG_LAT;
@@ -78,7 +125,7 @@ export function registerRouteInfoTools(server: McpServer, env: Env): void {
     server,
     "get_route_info",
     "Reviewing route details…",
-    "Returns trailheads, trails, water sources, and centroid elevation around a PNW area or arbitrary point. Pulls from OpenStreetMap (trails, parking, springs, streams, rivers) and USGS 3DEP (elevation). Trails are trimmed to the longest 10 by estimated length. `trail_name` matches case-insensitively against OSM name, alt_name, loc_name, official_name, AND the USFS trail number in `ref` — so \"724\" or \"Trail 724\" finds Weden Creek Trail #724, and seeded popular-name aliases (e.g. \"Gothic Basin\" → Weden Creek) are expanded automatically. If the name filter matches nothing but trails exist in the radius, the UNFILTERED trail list is returned with an explanatory caveat instead of an empty array — check caveats before concluding \"no trails here\". Returns both `water_sources_within_500m` (strict — for \"is there water near camp\") and `water_sources_in_area` (radius-wide — for \"what water do I cross on this trail\"). Use this for first-pass route scouting; ALWAYS verify with a real trail map (Green Trails, USGS quad, or CalTopo) before the trip — OSM trail data has gaps and labels can be wrong. If you already have an `area_id` from `find_areas` or a prior tool call, pass it directly to avoid re-resolution. USGS elevation is sometimes flaky; if `centroid_elevation_ft` is null the source is omitted from citations and a caveat is added — surface the missing elevation to the user rather than inventing one.",
+    "Returns trailheads, trails, water sources, and centroid elevation around a PNW area or arbitrary point. Pulls from OpenStreetMap (trails, parking, springs, streams, rivers) and USGS 3DEP (elevation). Trails are trimmed to the longest 10 by estimated length. `trail_name` matches case-insensitively against OSM name, alt_name, loc_name, official_name, AND the USFS trail number in `ref` — so \"724\" or \"Trail 724\" finds Weden Creek Trail #724, and seeded popular-name aliases (e.g. \"Gothic Basin\" → Weden Creek) are expanded automatically. If the name filter matches nothing but trails exist in the radius, the UNFILTERED trail list is returned with an explanatory caveat instead of an empty array — check caveats before concluding \"no trails here\". Returns both `water_sources_within_500m` (strict — for \"is there water near camp\") and `water_sources_in_area` (radius-wide — for \"what water do I cross on this trail\"). CRITICAL — an empty result is not automatically a finding: check `source_status` before concluding anything from a zero. `source_status.osm_trails|osm_trailheads|osm_water` each report `ok: false` with a `failure` reason when that Overpass query timed out, was rate-limited, or errored; the corresponding empty list then means \"the lookup failed\", NOT \"nothing is mapped here\", and `water_summary` says the data is unavailable rather than quoting a count of zero. `source_status.implausibly_empty` is true when every query SUCCEEDED but returned zero trails and zero trailheads inside a known wilderness area — also a probable upstream problem. Never tell a user \"no water\" or \"no trails\" on the strength of a result where any of these flags is set. Use this for first-pass route scouting; ALWAYS verify with a real trail map (Green Trails, USGS quad, or CalTopo) before the trip — OSM trail data has gaps and labels can be wrong. If you already have an `area_id` from `find_areas` or a prior tool call, pass it directly to avoid re-resolution. USGS elevation is sometimes flaky; if `centroid_elevation_ft` is null the source is omitted from citations and a caveat is added — surface the missing elevation to the user rather than inventing one.",
     {
       area_id: z.string().optional().describe("Known PNW area id (e.g. 'enchantments'). Overrides lat/lon."),
       lat: z.number().min(-90).max(90).optional().describe("Latitude (decimal). Required if area_id absent."),
@@ -96,171 +143,243 @@ export function registerRouteInfoTools(server: McpServer, env: Env): void {
           "Optional trail filter (case-insensitive). Matches OSM name/alt_name/loc_name/official_name substrings and USFS trail numbers ('724', 'Trail 724'). Zero matches fall back to the unfiltered nearby list with a caveat.",
         ),
     },
-    async ({ area_id, lat, lon, radius_km, trail_name }) => {
-      let resolvedLat: number | undefined = lat;
-      let resolvedLon: number | undefined = lon;
-      let areaName: string | undefined;
-      let driveMinutes: number | undefined;
-
-      if (area_id) {
-        const area = findAreaById(area_id);
-        if (!area) {
-          return payloadResponse(
-            empty<RouteInfoData>([`Unknown area_id: ${area_id}`]),
-          );
-        }
-        resolvedLat = area.centroid.lat;
-        resolvedLon = area.centroid.lon;
-        areaName = area.name;
-        driveMinutes = Math.round(area.drive_hours_from_seattle * 60);
-      }
-
-      if (typeof resolvedLat !== "number" || typeof resolvedLon !== "number") {
-        return payloadResponse(
-          empty<RouteInfoData>(["Must provide either area_id or both lat and lon."]),
-        );
-      }
-
-      const rlat = roundCoord(resolvedLat);
-      const rlon = roundCoord(resolvedLon);
-      const bbox = bboxAround(rlat, rlon, radius_km);
-
-      const [trailsResult, trailheadsResult, waterResult, elevResult] = await Promise.all([
-        findTrails(env, bbox).catch(() => null),
-        findTrailheads(env, bbox).catch(() => null),
-        findWaterSources(env, bbox).catch(() => null),
-        getElevation(env, rlat, rlon).catch(() => null),
-      ]);
-
-      const caveats: string[] = [...STANDARD_CAVEATS];
-      if (trailsResult === null) caveats.push("OSM trails unavailable.");
-      if (trailheadsResult === null) caveats.push("OSM trailheads unavailable.");
-      if (waterResult === null) caveats.push("OSM water sources unavailable.");
-      if (elevResult === null || !Number.isFinite(elevResult?.elevation_ft ?? Number.NaN)) {
-        caveats.push("USGS elevation unavailable.");
-      }
-
-      let trails: OsmTrail[] = trailsResult ?? [];
-      if (trail_name) {
-        // Match across OSM name/alt_name/loc_name/official_name and USFS
-        // trail number (ref), expanding seeded popular-name aliases
-        // ("Gothic Basin" → "weden creek"). An empty match against a
-        // non-empty trail list falls back to the unfiltered list with a
-        // caveat — an empty array reads as "no trails here", which is
-        // factually wrong when the name simply didn't match.
-        const queries = [trail_name, ...expandTrailAliases(trail_name)];
-        const matched = trails.filter((t) => queries.some((q) => osmTrailMatchesQuery(t, q)));
-        if (matched.length === 0 && trails.length > 0) {
-          caveats.push(
-            `No trail matched "${trail_name}" by name, alt name, or USFS trail number; ` +
-              `nearby trails listed UNFILTERED — verify names. Popular names often differ ` +
-              `from OSM's (e.g. Gothic Basin is "Weden Creek Trail" #724); try the USFS ` +
-              `trail number if you know it.`,
-          );
-        } else {
-          trails = matched;
-        }
-      }
-      // Trim to top 10 by length.
-      trails = [...trails]
-        .sort((a, b) => b.length_m_estimate - a.length_m_estimate)
-        .slice(0, 10);
-
-      const trailheads = trailheadsResult ?? [];
-      const allWater = waterResult ?? [];
-
-      // Filter water within ~500m of centroid. For point features (springs,
-      // drinking_water) compare lat/lon. For ways (rivers, streams) the
-      // entry has a `geometry` polyline — find the *closest* vertex,
-      // because a 5-mile river that crosses the bbox would otherwise be
-      // collapsed to its first vertex (which may be miles away). This
-      // was the bug where the Suiattle River Trail returned 0 water.
-      const center = { lat: rlat, lon: rlon };
-      const minDistanceM = (w: OsmWaterSource): number | null => {
-        if (w.geometry && w.geometry.length > 0) {
-          let min = Infinity;
-          for (const v of w.geometry) {
-            const d = haversineM(center, v);
-            if (d < min) min = d;
-          }
-          return Number.isFinite(min) ? min : null;
-        }
-        if (typeof w.lat === "number" && typeof w.lon === "number") {
-          return haversineM(center, { lat: w.lat, lon: w.lon });
-        }
-        return null;
-      };
-      const water500: OsmWaterSource[] = allWater.filter((w) => {
-        const d = minDistanceM(w);
-        return d !== null && d <= 500;
-      });
-
-      // "In-area" view: anything OSM returned for the bbox. Useful for
-      // questions like "is there water on this trip?" — the 500m filter
-      // is too narrow when the area centroid is a peak summit.
-      const waterInArea: OsmWaterSource[] = allWater.slice(0, 25);
-
-      const springCountArea = allWater.filter(
-        (w) => w.kind === "spring" || w.kind === "drinking_water",
-      ).length;
-      const streamCountArea = allWater.filter(
-        (w) => w.kind === "stream" || w.kind === "river" || w.kind === "waterway" || w.kind === "water",
-      ).length;
-      const springCount500 = water500.filter(
-        (w) => w.kind === "spring" || w.kind === "drinking_water",
-      ).length;
-      const water_summary =
-        `${springCount500} springs / drinking-water points within 500m of centroid; ` +
-        `${springCountArea} springs and ${streamCountArea} stream/river segments in the ${radius_km}km area.`;
-
-      const centroidElev =
-        elevResult && Number.isFinite(elevResult.elevation_ft)
-          ? Math.round(elevResult.elevation_ft)
-          : null;
-
-      const sources: Source[] = [
-        makeSource(
-          "https://overpass-api.de/api/interpreter",
-          "OpenStreetMap (Overpass API) — trails, trailheads, water",
-          {
-            license: "ODbL",
-            confidence: trailsResult || trailheadsResult || waterResult ? "medium" : "low",
-          },
-        ),
-      ];
-      // Only cite USGS when it actually returned a value — earlier versions
-      // claimed `confidence: "high"` even when elevation was null.
-      if (centroidElev !== null) {
-        sources.push(
-          makeSource(
-            "https://epqs.nationalmap.gov/v1/json",
-            "USGS 3DEP elevation (EPQS)",
-            { license: "public domain (US Govt)", confidence: "high" },
-          ),
-        );
-      }
-
-      const data: RouteInfoData = {
-        centroid: {
-          lat: rlat,
-          lon: rlon,
-          ...(area_id ? { area_id } : {}),
-          ...(areaName ? { area_name: areaName } : {}),
-        },
-        bbox,
-        radius_km,
-        trailheads,
-        trails,
-        water_sources_within_500m: water500,
-        water_sources_in_area: waterInArea,
-        centroid_elevation_ft: centroidElev,
-        water_summary,
-        ...(typeof driveMinutes === "number" ? { driving_from_seattle_minutes: driveMinutes } : {}),
-      };
-
-      const confidence: Confidence = "medium";
-      const payload: ToolPayload<RouteInfoData> = ok(data, sources, confidence, caveats);
-      return payloadResponse(payload);
-    },
+    async (args) => payloadResponse(await buildRouteInfo(env, args)),
   );
+}
+
+export interface RouteInfoArgs {
+  area_id?: string | undefined;
+  lat?: number | undefined;
+  lon?: number | undefined;
+  radius_km: number;
+  trail_name?: string | undefined;
+}
+
+/**
+ * The tool body, extracted so the failed-vs-genuinely-empty distinction (#93)
+ * can be asserted directly rather than through the MCP transport.
+ */
+export async function buildRouteInfo(
+  env: Env,
+  { area_id, lat, lon, radius_km, trail_name }: RouteInfoArgs,
+): Promise<ToolPayload<RouteInfoData>> {
+  let resolvedLat: number | undefined = lat;
+  let resolvedLon: number | undefined = lon;
+  let areaName: string | undefined;
+  let driveMinutes: number | undefined;
+
+  if (area_id) {
+    const area = findAreaById(area_id);
+    if (!area) {
+      return empty<RouteInfoData>([`Unknown area_id: ${area_id}`]);
+    }
+    resolvedLat = area.centroid.lat;
+    resolvedLon = area.centroid.lon;
+    areaName = area.name;
+    driveMinutes = Math.round(area.drive_hours_from_seattle * 60);
+  }
+
+  if (typeof resolvedLat !== "number" || typeof resolvedLon !== "number") {
+    return empty<RouteInfoData>(["Must provide either area_id or both lat and lon."]);
+  }
+
+  const rlat = roundCoord(resolvedLat);
+  const rlon = roundCoord(resolvedLon);
+  const bbox = bboxAround(rlat, rlon, radius_km);
+
+  const threw = (cause: unknown): OverpassStatus => ({
+    ok: false,
+    failure: "network_error",
+    detail: (cause as Error)?.message ?? "threw",
+  });
+  const [trailsResult, trailheadsResult, waterResult, elevResult] = await Promise.all([
+    findTrails(env, bbox).catch(
+      (c): OsmResult<OsmTrail> => ({ items: [], status: threw(c) }),
+    ),
+    findTrailheads(env, bbox).catch(
+      (c): OsmResult<OsmTrailhead> => ({ items: [], status: threw(c) }),
+    ),
+    findWaterSources(env, bbox).catch(
+      (c): OsmResult<OsmWaterSource> => ({ items: [], status: threw(c) }),
+    ),
+    getElevation(env, rlat, rlon).catch(() => null),
+  ]);
+
+  const caveats: string[] = [...STANDARD_CAVEATS];
+
+  // Name the failure and say what it is *not*, so an empty list cannot be
+  // read as a finding about the area (#93).
+  const failureCaveat = (label: string, status: OverpassStatus): void => {
+    if (status.ok) return;
+    caveats.push(
+      `UPSTREAM DATA UNAVAILABLE — ${label}: ${describeOverpassFailure(status)}. ` +
+        `The empty ${label} result below reflects that failure, NOT an absence of ` +
+        `mapped features here. Re-run before drawing any conclusion from it.`,
+    );
+  };
+  failureCaveat("OSM trails", trailsResult.status);
+  failureCaveat("OSM trailheads", trailheadsResult.status);
+  failureCaveat("OSM water sources", waterResult.status);
+
+  const elevationOk =
+    elevResult !== null && Number.isFinite(elevResult.elevation_ft ?? Number.NaN);
+  if (!elevationOk) caveats.push("USGS elevation unavailable.");
+
+  const anyOsmFailure =
+    !trailsResult.status.ok || !trailheadsResult.status.ok || !waterResult.status.ok;
+
+  let trails: OsmTrail[] = trailsResult.items;
+  if (trail_name) {
+    // Match across OSM name/alt_name/loc_name/official_name and USFS
+    // trail number (ref), expanding seeded popular-name aliases
+    // ("Gothic Basin" → "weden creek"). An empty match against a
+    // non-empty trail list falls back to the unfiltered list with a
+    // caveat — an empty array reads as "no trails here", which is
+    // factually wrong when the name simply didn't match.
+    const queries = [trail_name, ...expandTrailAliases(trail_name)];
+    const matched = trails.filter((t) => queries.some((q) => osmTrailMatchesQuery(t, q)));
+    if (matched.length === 0 && trails.length > 0) {
+      caveats.push(
+        `No trail matched "${trail_name}" by name, alt name, or USFS trail number; ` +
+          `nearby trails listed UNFILTERED — verify names. Popular names often differ ` +
+          `from OSM's (e.g. Gothic Basin is "Weden Creek Trail" #724); try the USFS ` +
+          `trail number if you know it.`,
+      );
+    } else {
+      trails = matched;
+    }
+  }
+  // Trim to top 10 by length.
+  trails = [...trails]
+    .sort((a, b) => b.length_m_estimate - a.length_m_estimate)
+    .slice(0, 10);
+
+  const trailheads = trailheadsResult.items;
+  const allWater = waterResult.items;
+
+  // Filter water within ~500m of centroid. For point features (springs,
+  // drinking_water) compare lat/lon. For ways (rivers, streams) the
+  // entry has a `geometry` polyline — find the *closest* vertex,
+  // because a 5-mile river that crosses the bbox would otherwise be
+  // collapsed to its first vertex (which may be miles away). This
+  // was the bug where the Suiattle River Trail returned 0 water.
+  const center = { lat: rlat, lon: rlon };
+  const minDistanceM = (w: OsmWaterSource): number | null => {
+    if (w.geometry && w.geometry.length > 0) {
+      let min = Infinity;
+      for (const v of w.geometry) {
+        const d = haversineM(center, v);
+        if (d < min) min = d;
+      }
+      return Number.isFinite(min) ? min : null;
+    }
+    if (typeof w.lat === "number" && typeof w.lon === "number") {
+      return haversineM(center, { lat: w.lat, lon: w.lon });
+    }
+    return null;
+  };
+  const water500: OsmWaterSource[] = allWater.filter((w) => {
+    const d = minDistanceM(w);
+    return d !== null && d <= 500;
+  });
+
+  // "In-area" view: anything OSM returned for the bbox. Useful for
+  // questions like "is there water on this trip?" — the 500m filter
+  // is too narrow when the area centroid is a peak summit.
+  const waterInArea: OsmWaterSource[] = allWater.slice(0, 25);
+
+  const springCountArea = allWater.filter(
+    (w) => w.kind === "spring" || w.kind === "drinking_water",
+  ).length;
+  const streamCountArea = allWater.filter(
+    (w) => w.kind === "stream" || w.kind === "river" || w.kind === "waterway" || w.kind === "water",
+  ).length;
+  const springCount500 = water500.filter(
+    (w) => w.kind === "spring" || w.kind === "drinking_water",
+  ).length;
+  // Counting a failed lookup down to "0 springs and 0 stream/river
+  // segments" is what turned an outage into a false water finding. When
+  // the query failed the summary says so instead of quoting zeros (#93).
+  const water_summary = waterResult.status.ok
+    ? `${springCount500} springs / drinking-water points within 500m of centroid; ` +
+      `${springCountArea} springs and ${streamCountArea} stream/river segments in the ${radius_km}km area.`
+    : `Water data unavailable — ${describeOverpassFailure(waterResult.status)}. ` +
+      `No count can be given for this area; this is not a finding of zero water.`;
+
+  const centroidElev =
+    elevResult && Number.isFinite(elevResult.elevation_ft)
+      ? Math.round(elevResult.elevation_ft)
+      : null;
+
+  // Plausibility check, applied only when nothing errored: a *successful*
+  // empty result still needs challenging where emptiness is unbelievable.
+  const implausiblyEmpty =
+    !anyOsmFailure &&
+    isImplausiblyEmpty({
+      trailCount: trailsResult.items.length,
+      trailheadCount: trailheads.length,
+      radius_km,
+      lat: rlat,
+      lon: rlon,
+    });
+  if (implausiblyEmpty) {
+    const near = nearestArea(rlat, rlon);
+    caveats.push(
+      `IMPLAUSIBLE EMPTY RESULT — Overpass reported success but returned zero trails ` +
+        `AND zero trailheads within ${radius_km}km of a point ` +
+        `${near ? `~${Math.round(near.distance_km)}km from ${near.area.name}` : "inside a known area"}. ` +
+        `Treat this as a probable upstream data problem, not as evidence that the area ` +
+        `is unmapped. Re-run, or cross-check with get_trip_reports or a trail map.`,
+    );
+  }
+
+  const sources: Source[] = [
+    makeSource(
+      "https://overpass-api.de/api/interpreter",
+      "OpenStreetMap (Overpass API) — trails, trailheads, water",
+      {
+        license: "ODbL",
+        confidence: anyOsmFailure || implausiblyEmpty ? "low" : "medium",
+      },
+    ),
+  ];
+  // Only cite USGS when it actually returned a value — earlier versions
+  // claimed `confidence: "high"` even when elevation was null.
+  if (centroidElev !== null) {
+    sources.push(
+      makeSource(
+        "https://epqs.nationalmap.gov/v1/json",
+        "USGS 3DEP elevation (EPQS)",
+        { license: "public domain (US Govt)", confidence: "high" },
+      ),
+    );
+  }
+
+  const data: RouteInfoData = {
+    centroid: {
+      lat: rlat,
+      lon: rlon,
+      ...(area_id ? { area_id } : {}),
+      ...(areaName ? { area_name: areaName } : {}),
+    },
+    bbox,
+    radius_km,
+    trailheads,
+    trails,
+    water_sources_within_500m: water500,
+    water_sources_in_area: waterInArea,
+    centroid_elevation_ft: centroidElev,
+    water_summary,
+    ...(typeof driveMinutes === "number" ? { driving_from_seattle_minutes: driveMinutes } : {}),
+    source_status: {
+      osm_trails: trailsResult.status,
+      osm_trailheads: trailheadsResult.status,
+      osm_water: waterResult.status,
+      usgs_elevation: { ok: elevationOk },
+      implausibly_empty: implausiblyEmpty,
+    },
+  };
+
+  const confidence: Confidence = anyOsmFailure || implausiblyEmpty ? "low" : "medium";
+  return ok(data, sources, confidence, caveats);
 }

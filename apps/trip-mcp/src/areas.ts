@@ -509,6 +509,41 @@ export function findAreaById(id: string): Area | undefined {
   return AREAS.find((a) => a.id === id);
 }
 
+/** Great-circle distance in km. */
+function distanceKm(a: LatLon, b: LatLon): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+export interface NearestArea {
+  area: Area;
+  distance_km: number;
+}
+
+/**
+ * The registered area whose centroid is closest to a point.
+ *
+ * The registry stores centroids, not polygons, so this is proximity rather
+ * than true containment — a point 8 km from the Goat Rocks centroid is
+ * "in Goat Rocks" for the purposes of judging whether an empty OSM result
+ * is plausible (#93). Callers that need real containment need real polygons.
+ */
+export function nearestArea(lat: number, lon: number): NearestArea | undefined {
+  let best: NearestArea | undefined;
+  for (const area of AREAS) {
+    const distance_km = distanceKm({ lat, lon }, area.centroid);
+    if (!best || distance_km < best.distance_km) best = { area, distance_km };
+  }
+  return best;
+}
+
 /**
  * Popular-name → OSM/official-name aliases for high-traffic mismatches
  * where the name everyone uses isn't what OSM tags the trail. Purely an

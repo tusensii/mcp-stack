@@ -12,7 +12,7 @@ import type { Env } from "../types.js";
 import { empty, makeSource, ok } from "../types.js";
 import { findAreaById } from "../areas.js";
 import { CAMPING, type Camping } from "../camping.js";
-import { findCampsites, type OsmCampsite } from "../sources/osm.js";
+import { describeOverpassFailure, findCampsites, type OsmCampsite } from "../sources/osm.js";
 import { bboxAroundPoint } from "../polyline.js";
 import { payloadResponse, titledTool } from "./utils.js";
 
@@ -77,7 +77,16 @@ export function registerCampWaterTools(server: McpServer, env: Env): void {
       let mappedSites: OsmCampsite[] = [];
       try {
         const bbox = bboxAroundPoint(area.centroid.lat, area.centroid.lon, radius_km);
-        mappedSites = (await findCampsites(env, bbox)).slice(0, 50);
+        const found = await findCampsites(env, bbox);
+        mappedSites = found.items.slice(0, 50);
+        if (!found.status.ok) {
+          // An empty `mapped_sites` after a failed query is not a statement
+          // that nothing is mapped here (#93).
+          caveats.push(
+            `UPSTREAM DATA UNAVAILABLE — mapped campsites: ${describeOverpassFailure(found.status)}. ` +
+              `\`mapped_sites\` is empty because the lookup failed, not because no sites are mapped.`,
+          );
+        }
         sources.push(
           makeSource("https://overpass-api.de/api/interpreter", "OpenStreetMap (Overpass API) — mapped campsites", {
             license: "ODbL",
