@@ -1,0 +1,75 @@
+{
+  // Worked example: the nine-option comparison card built by hand the day the
+  // Royal Basin trip was cancelled. Adding a candidate someone proposed
+  // mid-discussion is an append here plus a rebuild.
+  "kind": "options",
+  "slug": "weekend-options-2026-08",
+  "title": "Weekend options",
+  "subtitle": "Three regions, scored against the group's criteria",
+
+  "dates": { "start": "2026-08-21", "end": "2026-08-23" },
+  "timezone": "America/Los_Angeles",
+
+  // The criteria that lived in chat. Every candidate is scored against these
+  // identically, and a failure names the criterion that caused it.
+  "criteria": {
+    "max_precip_pct": 20,
+    // none = any thunder mention disqualifies
+    // low  = only an active watch or warning disqualifies
+    // any  = thunder is not a disqualifier
+    "thunder": "none",
+    "permit_mechanisms": ["none", "self-issue"],
+    "max_drive_hours": 4,
+    "styles": ["backpack"]
+  },
+
+  "candidates": [
+    {
+      "id": "tuck-robin",
+      "name": "Tuck and Robin Lakes",
+      "region": "Alpine Lakes",
+      "point": { "lat": 47.5677, "lon": -121.1043, "label": "Robin Lakes" },
+      "style": "backpack",
+      "permit_mechanism": "self-issue",
+      "drive_hours": 2.5,
+      "links": [
+        {
+          "label": "WTA — Tuck and Robin Lakes",
+          "url": "https://www.wta.org/go-hiking/hikes/tuck-and-robin-lakes"
+        }
+      ]
+    },
+    {
+      "id": "royal-basin",
+      "name": "Royal Basin",
+      "region": "Olympics",
+      "area_id": "olympic",
+      "point": { "lat": 47.8235, "lon": -123.1085, "label": "Upper Royal Basin" },
+      "style": "backpack",
+      "permit_mechanism": "reservation",
+      "drive_hours": 3.25,
+      "note": "The cancelled trip. Kept on the card so nobody re-proposes it.",
+      "links": []
+    },
+    {
+      "id": "wallowas",
+      "name": "Lakes Basin, Wallowas",
+      "region": "Eastern Oregon",
+      "point": { "lat": 45.2, "lon": -117.2, "label": "Lakes Basin" },
+      "style": "backpack",
+      "permit_mechanism": "self-issue",
+      "drive_hours": 7,
+      // Rendered on the card so the group sees it was checked, not ignored.
+      "proposed_by": "M. Chen",
+      "links": []
+    }
+  ],
+
+  // Ruled out before any pull. Shown as a strip so they stay visible.
+  "excluded_regions": [
+    { "name": "North Cascades", "reason": "Highway 20 closed for slide repair." }
+  ],
+
+  "provenance": { "link_check": "fail" },
+  "outputs": { "jsx": true, "pdf": true }
+}

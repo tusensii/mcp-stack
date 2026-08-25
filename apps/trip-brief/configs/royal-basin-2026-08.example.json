@@ -1,0 +1,127 @@
+{
+  // Worked example: the Aug 2026 Royal Basin brief, as a config instead of a
+  // chat sandbox. Copy this, change the facts, run `pnpm brief build`.
+  "kind": "trip",
+  "slug": "royal-basin-2026-08",
+  "title": "Royal Basin",
+  "subtitle": "Two nights in the upper basin",
+
+  // Resolves the safety brief, permits, rivers, conditions and road status.
+  "area_id": "olympic",
+
+  "destination": {
+    "lat": 47.8235,
+    "lon": -123.1085,
+    "label": "Upper Royal Basin",
+    // Drives the `elevation_adjusted` weather block, which the climb card
+    // prefers over the valley grid cell.
+    "elevation_ft": 5300
+  },
+  "trailhead": {
+    "lat": 47.8938,
+    "lon": -123.1372,
+    "label": "Upper Dungeness Trailhead",
+    "elevation_ft": 2500
+  },
+
+  "dates": { "start": "2026-08-21", "end": "2026-08-23" },
+  "timezone": "America/Los_Angeles",
+
+  // Basin walls cut direct sun about an hour before true sunset. Omit this
+  // key and the valley-shade line does not render.
+  "terrain_shade_minutes": 60,
+
+  "route": {
+    "trail_name": "Upper Dungeness Trail",
+    "points": [
+      [47.8938, -123.1372],
+      [47.8235, -123.1085]
+    ],
+    // The hours the party is actually walking uphill.
+    "climb_window": {
+      "date": "2026-08-21",
+      "start_hour": 10,
+      "end_hour": 18,
+      "pace_mph": 1.4
+    }
+  },
+
+  "campground": {
+    "name": "Dungeness Forks Campground",
+    "first_come": true,
+    "sites": 9
+  },
+
+  "permit": {
+    "required": true,
+    "system": "Olympic wilderness quota",
+    "mechanism": "reservation"
+  },
+
+  // Required whenever permit.required is true. These are the facts off the
+  // confirmation — not where parties usually camp in this drainage. The
+  // itinerary, the storm-exposure flag and the sanitation line all derive
+  // from here.
+  "reservation": {
+    "confirmation_reference": "OLYM-2026-884213",
+    "assigned_camp_area": "Upper Royal Basin camp area",
+    "camp_elevation_ft": 5300,
+    "above_treeline": true,
+    "toilet_available": false,
+    "nights": ["2026-08-21", "2026-08-22"],
+    "party_size": 4,
+    "permit_holder": "C. Petrie",
+    "intake": "screenshot"
+  },
+
+  // Highest-value fact in the packet. Omit the key and the section is gone.
+  "ranger_call": {
+    "station": "Quilcene Ranger District / Wilderness Information Center",
+    "phone": "360-565-3100",
+    "called_at": "2026-08-19",
+    "notes": [
+      "FS 2860 is open and gravel-graded to the trailhead.",
+      "Dispersed camping is legal on Forest Service land below the park boundary."
+    ],
+    "campground_fallback": "Dispersed pullouts on FS 2860 below the park boundary."
+  },
+
+  "group_roles": [
+    { "role": "Driver", "who": "C. Petrie" },
+    { "role": "Permit holder", "who": "C. Petrie" },
+    { "role": "Bear can", "who": "J. Alvarez", "note": "BV500, holds three days for two" }
+  ],
+
+  "drive": {
+    "origin": "Seattle, WA",
+    "hours": 3.25,
+    "outbound": [
+      "Edmonds–Kingston ferry.",
+      "WA-104 west to US-101 south.",
+      "Palo Alto Road to FS 2860, 11 miles gravel to the trailhead."
+    ]
+    // Omit `return` and the offline variant reverses `outbound`, labeled as
+    // derived. Supply it when the way home differs.
+  },
+
+  "phones": [
+    { "label": "Olympic WIC", "number": "360-565-3100", "hours": "8am–4:30pm" }
+  ],
+
+  "links": [
+    {
+      "label": "Olympic wilderness permits",
+      "url": "https://www.recreation.gov/permits/4098362"
+    }
+  ],
+
+  "provenance": {
+    // Refuse to print catalog IDs and numbers as facts about this trip.
+    "allow_lookup_facts": false,
+    // Every URL is fetched at build time; a dead one fails the build.
+    "link_check": "fail",
+    "low_confidence": "hedge"
+  },
+
+  "outputs": { "jsx": true, "pdf": true, "offline": true }
+}

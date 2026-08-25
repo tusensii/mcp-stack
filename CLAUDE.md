@@ -93,6 +93,12 @@ file follow-up issues; don't pile changes into one branch.
   consume them. New apps should reach for these before reinventing.
 - `apps/*` — one Cloudflare Worker each. Independent at runtime; no shared
   state, no shared KV, no shared Durable Objects.
+  - Exception: `apps/trip-brief` is a Node CLI, not a Worker — it consumes
+    the deployed trip-mcp over MCP to generate trip briefs and options cards
+    (JSX + single-page mobile PDF). It has no `wrangler.jsonc` and is
+    deliberately absent from the deploy workflow's app matrix. Adding another
+    non-Worker app to `apps/*` needs a better reason than this one had; it
+    lives here because it is trip-mcp's consumer, not a shared primitive.
 - Private siblings (therapy-mcp, otf-mcp) live in `tusensii/mcp-stack-private`
   and are out of scope for this repo. Don't reference them in public code or
   issues.
