@@ -70,6 +70,14 @@ export async function getMountainPassConditions(env: Env): Promise<MountainPassC
           "wsdot_http_401 — AccessCode rejected; the WSDOT_API_KEY secret is likely expired or rotated. Re-issue at wsdot.wa.gov/traffic/api/ and `wrangler secret put WSDOT_API_KEY`",
         );
       }
+      // 401/403 from this endpoint means the AccessCode is missing, expired
+      // or revoked — name that in the caveat so the fix (rotate
+      // WSDOT_API_KEY, see README "Rotating the WSDOT key") is obvious.
+      if (rawRes.status === 401 || rawRes.status === 403) {
+        throw new Error(
+          `wsdot_http_${rawRes.status}: WSDOT_API_KEY ${env.WSDOT_API_KEY ? "rejected (expired/revoked)" : "missing"} — rotate via wrangler secret put WSDOT_API_KEY (see apps/trip-mcp/README.md)`,
+        );
+      }
       throw new Error(`wsdot_http_${rawRes.status}`);
     }
     let res: RawPassCondition[];
