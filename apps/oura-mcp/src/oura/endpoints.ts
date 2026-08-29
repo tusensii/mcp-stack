@@ -50,6 +50,37 @@ export async function getSleepPeriods(
   return client.paginate<SleepPeriod>("/sleep", params, maxPages);
 }
 
+/**
+ * Sleep periods whose `day` falls in [start_date, end_date] inclusive.
+ *
+ * Oura's `/sleep` endpoint filters by bedtime, not by the `day` field the
+ * tools key on, so a period with `day = end_date` whose bedtime_start was
+ * the previous evening is dropped by a tight query (#33, #113). We widen
+ * the upstream window by one day on each side and post-filter by `day`
+ * so callers see exactly the days they asked for, including the latest
+ * synced night. Use this instead of `getSleepPeriods` whenever the result
+ * is keyed by `day`.
+ */
+export async function getSleepPeriodsByDay(
+  client: OuraClient,
+  params: DateParams,
+  maxPages?: number,
+): Promise<SleepPeriod[]> {
+  const padded: DateParams = {
+    ...params,
+    start_date: shiftYmd(params.start_date, -1),
+    end_date: shiftYmd(params.end_date, 1),
+  };
+  const periods = await getSleepPeriods(client, padded, maxPages);
+  return periods.filter((p) => p.day >= params.start_date && p.day <= params.end_date);
+}
+
+function shiftYmd(ymd: string, days: number): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function getSleepTime(
   client: OuraClient,
   params: DateParams,
