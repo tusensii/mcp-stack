@@ -48,6 +48,23 @@ wrangler secret put BRAVE_API_KEY     # optional — https://brave.com/search/ap
 pnpm deploy
 ```
 
+### Rotating the WSDOT key
+
+WSDOT Traveler Information API keys can expire or be revoked without
+notice. When that happens `get_conditions` / `research_trip` still succeed
+but `wsdot.passes` is empty and the caveats include
+`wsdot_passes: wsdot_http_401|403: WSDOT_API_KEY rejected …`. Fix (≈2 min):
+
+1. Request a new key at https://wsdot.wa.gov/traffic/api/ (free; emailed).
+2. `cd apps/trip-mcp && pnpm wrangler secret put WSDOT_API_KEY` and paste it
+   (credential secrets are always set by the repo owner, never by CI).
+3. Call `get_conditions(passes: ["Snoqualmie"])` — pass data should be
+   present and the caveat gone. The response is cached in KV for
+   `TTL.WSDOT_PASS`; a stale error caveat can persist until that expires.
+
+The secret lives only in the Worker (`wrangler secret list` to confirm the
+name exists); it is not in `wrangler.jsonc` or CI.
+
 ## Use
 
 URL pattern: `https://trip-mcp.<sub>.workers.dev/s/<MCP_PATH_SECRET>/mcp`
