@@ -276,7 +276,7 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       "Pass `overlay_tags: true` to attach all user tags falling on each date, " +
       "or `overlay_tags: [\"sick\", \"alcohol\"]` to filter by tag name (case-insensitive). " +
       "When set, each entry gets a `tags` array of {name, comment?, timestamp?}. " +
-      "Dates: \"date\" is the date the sleep period started (sourced from the underlying sleep period's `day` field), NOT the morning the score is reported on. This differs from oura_daily_readiness/oura_daily_sleep, which key on the morning-of-report date — beware of off-by-one alignment when correlating across tools.",
+      "Dates: \"date\" is the underlying sleep period's `day` field, which is the morning-of-report date (the date the sleep period ENDS) — the same convention as oura_daily_sleep, oura_daily_readiness and oura_sleep_detail (verified against live data in #54: bedtime_start 2026-08-25 23:34 → date 2026-08-26). Rows align 1:1 with those tools by date; no off-by-one adjustment is needed when correlating.",
     {
       start_date: z.string().optional().describe("Start date YYYY-MM-DD. Defaults to today minus 6 days (7-day inclusive window)."),
       end_date: z.string().optional().describe("End date YYYY-MM-DD. Defaults to today."),
