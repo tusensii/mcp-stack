@@ -18,6 +18,13 @@ export class OuraApiError extends Error {
 export class OuraClient {
   private readonly http: FetchClient;
 
+  /**
+   * `pat` is an Oura personal access token. Oura stopped issuing PATs in
+   * December 2025; the deployed token predates that and is grandfathered
+   * (verified still working 2026-08-29 — see README "Auth status", #62).
+   * A 401 on every call means the grandfathering ended and the OAuth2
+   * migration (#63) is required — a new PAT cannot be minted.
+   */
   constructor(pat: string) {
     this.http = createBearerClient({ token: pat });
   }

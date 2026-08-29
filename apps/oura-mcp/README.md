@@ -28,6 +28,8 @@ recovery forecasts). 22 tools total — the largest app in the stack.
 
 ```bash
 # Oura PAT — https://cloud.ouraring.com/personal-access-tokens
+# NOTE: Oura deprecated personal access tokens in December 2025 and no
+# longer issues new ones. See "Auth status" below before relying on this.
 wrangler secret put OURA_PAT
 
 # Path-secret gate
@@ -53,3 +55,26 @@ URL pattern: `https://oura-mcp.<your-subdomain>.workers.dev/s/<MCP_PATH_SECRET>/
 - `src/tools/*.ts` — One file per tool.
 
 Auth is provided by `@mcp-stack/auth-bearer` (static PAT).
+
+## Auth status (PAT deprecation)
+
+The Oura API v2 spec (`openapi-1.37`) states that personal access tokens
+were deprecated in December 2025 and can no longer be created. The PAT this
+Worker uses was issued before that cutoff and is **grandfathered**: as of
+2026-08-29 it still authenticates every endpoint (verified live — daily
+scores, sleep periods and HRV series all returned current data; see #62).
+Oura has not published a sunset date for existing tokens.
+
+Implications:
+
+- Do not revoke or regenerate `OURA_PAT` — a replacement cannot be issued.
+  If it is ever lost or rejected (HTTP 401 on every call), the only path
+  forward is the OAuth2 migration tracked in #63.
+- OAuth2 migration is blocked on a manual owner step: registering an OAuth
+  application at https://cloud.ouraring.com/oauth/applications to obtain a
+  client id/secret. Once that exists, the plan is a one-shot bootstrap
+  script (authorization-code flow → refresh token stored as a Wrangler
+  secret) and refresh-on-401 in `OuraClient`, with no tool schema changes.
+- Re-check cadence: nothing to re-verify unless calls start failing with
+  401. A 401 from `api.ouraring.com` with a token that previously worked
+  means the grandfathering ended.
