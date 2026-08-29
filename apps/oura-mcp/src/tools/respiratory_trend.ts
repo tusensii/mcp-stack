@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { OuraClient } from "../oura/client.js";
 import { OuraApiError } from "../oura/client.js";
-import { getSleepPeriods } from "../oura/endpoints.js";
+import { getSleepPeriodsByDay } from "../oura/endpoints.js";
 import { fetchTagsByDay, type TagEntry } from "../oura/metrics.js";
 import type { SleepPeriod } from "../oura/types.js";
 import {
@@ -73,7 +73,7 @@ export function registerRespiratoryTrendTool(server: McpServer, client: OuraClie
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
       try {
-        const periods = await getSleepPeriods(client, range);
+        const periods = await getSleepPeriodsByDay(client, range);
 
         // Group by day, then pick one per day.
         const byDay = new Map<string, SleepPeriod[]>();

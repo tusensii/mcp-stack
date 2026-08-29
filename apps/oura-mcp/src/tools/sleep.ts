@@ -5,6 +5,7 @@ import { OuraApiError } from "../oura/client.js";
 import {
   getDailySleep,
   getSleepPeriods,
+  getSleepPeriodsByDay,
   getSleepTime,
 } from "../oura/endpoints.js";
 import {
@@ -292,7 +293,7 @@ export function registerSleepTools(server: McpServer, client: OuraClient): void 
       const err = validateDateRange(range.start_date, range.end_date);
       if (err) return errorContent(err);
       try {
-        const periods = await getSleepPeriods(client, range);
+        const periods = await getSleepPeriodsByDay(client, range);
         // Group non-deleted periods by date, sort each group by total_sleep_duration desc,
         // and pick the longest period that has a non-null average_hrv. If every period for
         // the date has null HRV, keep the longest period anyway (so the date is still represented).
